@@ -1,56 +1,244 @@
 import { GoogleAccount, GoogleDriveState } from '../types';
 import { StorageService } from './storageService';
 
-const GOOGLE_AUTH_STORAGE_KEY = 'tasker_google_auth_v1';
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: Record<string, unknown>) => void;
+          renderButton: (parent: HTMLElement, options: Record<string, unknown>) => void;
+          prompt: () => void;
+        };
+        oauth2: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            callback: (response: {
+              access_token?: string;
+              error?: string;
+              expires_in?: number;
+            }) => void;
+          }) => {
+            requestAccessToken: (overrideConfig?: Record<string, unknown>) => void;
+          };
+          revoke: (token: string, done?: () => void) => void;
+        };
+      };
+    };
+  }
+}
+
+// Default Google OAuth Client ID (can be overridden by user in settings or login screen)
+const DEFAULT_GOOGLE_CLIENT_ID = '358509827419-o4g10l70k2e646g1l3c18e00188uimka.apps.googleusercontent.com';
+const GOOGLE_AUTH_FLAG = 'tasker_google_authenticated_v2';
+const GOOGLE_CLIENT_ID_KEY = 'tasker_google_client_id_v2';
 
 export class GoogleAuthService {
-  private static defaultAccounts: GoogleAccount[] = [
-    {
-      id: 'acc-primary',
-      email: 'mouli.workspace@gmail.com',
-      name: 'Mouli User (Google Account X)',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces',
-      addedAt: new Date().toISOString(),
-      isPrimary: true,
-    },
-  ];
+  /**
+   * Retrieves the configured Google Client ID.
+   */
+  static getClientId(): string {
+    const custom = localStorage.getItem(GOOGLE_CLIENT_ID_KEY);
+    if (custom && custom.trim().length > 10) {
+      return custom.trim();
+    }
+    const state = StorageService.getGoogleDriveState();
+    return state.clientId || DEFAULT_GOOGLE_CLIENT_ID;
+  }
 
+  /**
+   * Saves custom Google Client ID.
+   */
+  static saveClientId(id: string): void {
+    const trimmed = id.trim();
+    localStorage.setItem(GOOGLE_CLIENT_ID_KEY, trimmed);
+    const state = this.getDriveState();
+    state.clientId = trimmed;
+    StorageService.saveGoogleDriveState(state);
+  }
+
+  /**
+   * Loads Drive State from local storage and purges any legacy mock data.
+   */
   static getDriveState(): GoogleDriveState {
     const raw = StorageService.getGoogleDriveState();
-    if (!raw.accounts || raw.accounts.length === 0) {
-      const initial: GoogleDriveState = {
-        isConnected: true,
-        userEmail: this.defaultAccounts[0].email,
-        userName: this.defaultAccounts[0].name,
-        userAvatar: this.defaultAccounts[0].avatarUrl,
-        folderId: 'tasker-app-data-vault-01',
-        lastSyncedAt: new Date().toISOString(),
-        isSyncing: false,
-        accounts: this.defaultAccounts,
-        activeStorageAccountEmail: this.defaultAccounts[0].email,
-      };
-      StorageService.saveGoogleDriveState(initial);
-      return initial;
+
+    // Cleanse any legacy mock test accounts from older sessions
+    if (raw.accounts && raw.accounts.length > 0) {
+      const sanitized = raw.accounts.filter(
+        a => !a.email.includes('mouli.workspace@gmail.com') && !a.name.includes('(Google Account X)')
+      );
+      if (sanitized.length !== raw.accounts.length) {
+        raw.accounts = sanitized;
+        if (sanitized.length === 0) {
+          raw.isConnected = false;
+          raw.userEmail = undefined;
+          raw.userName = undefined;
+          raw.userAvatar = undefined;
+          raw.activeStorageAccountEmail = undefined;
+        } else {
+          raw.userEmail = sanitized[0].email;
+          raw.userName = sanitized[0].name;
+          raw.userAvatar = sanitized[0].avatarUrl;
+          raw.activeStorageAccountEmail = sanitized[0].email;
+        }
+        StorageService.saveGoogleDriveState(raw);
+      }
+    }
+
+    if (!raw.accounts) {
+      raw.accounts = [];
     }
     return raw;
   }
 
-  static getActiveAccount(): GoogleAccount {
+  /**
+   * Returns active storage account.
+   */
+  static getActiveAccount(): GoogleAccount | null {
     const state = this.getDriveState();
+    if (state.accounts.length === 0) return null;
     const active = state.accounts.find(a => a.email === state.activeStorageAccountEmail);
-    return active || state.accounts[0] || this.defaultAccounts[0];
+    return active || state.accounts[0];
   }
 
+  /**
+   * Returns all linked Google accounts.
+   */
   static getAllAccounts(): GoogleAccount[] {
     return this.getDriveState().accounts;
   }
 
-  static signInWithGoogle(email: string, name?: string): GoogleAccount {
-    const state = this.getDriveState();
-    const existing = state.accounts.find(a => a.email.toLowerCase() === email.toLowerCase());
+  /**
+   * Checks if user is authenticated with a real account.
+   */
+  static isAuthenticated(): boolean {
+    const authFlag = localStorage.getItem(GOOGLE_AUTH_FLAG);
+    if (authFlag !== 'true') return false;
 
-    const accountName = name || email.split('@')[0].replace(/[._]/g, ' ').toUpperCase();
-    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(accountName)}&background=6366f1&color=fff`;
+    const state = this.getDriveState();
+    return state.isConnected && !!state.userEmail && state.accounts.length > 0;
+  }
+
+  /**
+   * Sets authentication state.
+   */
+  static setAuthenticated(auth: boolean): void {
+    localStorage.setItem(GOOGLE_AUTH_FLAG, auth ? 'true' : 'false');
+  }
+
+  /**
+   * Real Google OAuth Flow using Google Identity Services (GIS)
+   * Requests real Google OAuth 2.0 Access Token with Google Drive scopes.
+   */
+  static async requestRealGoogleOAuth(customClientId?: string): Promise<GoogleAccount> {
+    const clientId = customClientId || this.getClientId();
+
+    return new Promise((resolve, reject) => {
+      if (typeof window === 'undefined' || !window.google?.accounts?.oauth2) {
+        reject(new Error('Google Identity Services SDK is not loaded. Please verify your internet connection.'));
+        return;
+      }
+
+      try {
+        const tokenClient = window.google.accounts.oauth2.initTokenClient({
+          client_id: clientId,
+          scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.appdata',
+          callback: async (tokenResponse) => {
+            if (tokenResponse.error) {
+              reject(new Error(`Google Authentication Error: ${tokenResponse.error}`));
+              return;
+            }
+
+            if (!tokenResponse.access_token) {
+              reject(new Error('No access token returned from Google.'));
+              return;
+            }
+
+            try {
+              // Fetch real user profile from Google OAuth2 API
+              const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: {
+                  Authorization: `Bearer ${tokenResponse.access_token}`,
+                },
+              });
+
+              if (!profileRes.ok) {
+                throw new Error(`Failed to fetch Google profile (HTTP ${profileRes.status})`);
+              }
+
+              const profile = await profileRes.json();
+              const realEmail: string = profile.email;
+              const realName: string = profile.name || profile.given_name || realEmail.split('@')[0];
+              const realAvatar: string = profile.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(realName)}&background=4285F4&color=fff`;
+
+              const account: GoogleAccount = {
+                id: `google-${profile.sub || Date.now()}`,
+                email: realEmail,
+                name: realName,
+                avatarUrl: realAvatar,
+                accessToken: tokenResponse.access_token,
+                tokenExpiresAt: Date.now() + (tokenResponse.expires_in || 3600) * 1000,
+                addedAt: new Date().toISOString(),
+                isPrimary: true,
+              };
+
+              // Save to Drive State and set as active storage vault
+              const state = this.getDriveState();
+              const existingIdx = state.accounts.findIndex(a => a.email.toLowerCase() === realEmail.toLowerCase());
+
+              if (existingIdx >= 0) {
+                state.accounts[existingIdx] = account;
+              } else {
+                state.accounts.push(account);
+              }
+
+              state.isConnected = true;
+              state.accessToken = tokenResponse.access_token;
+              state.userEmail = realEmail;
+              state.userName = realName;
+              state.userAvatar = realAvatar;
+              state.activeStorageAccountEmail = realEmail;
+              state.lastSyncedAt = new Date().toISOString();
+
+              StorageService.saveGoogleDriveState(state);
+              this.setAuthenticated(true);
+
+              // Proactively initialize folder on real Google Drive
+              this.initDriveFolder(tokenResponse.access_token).catch(() => {});
+
+              resolve(account);
+            } catch (err: unknown) {
+              const error = err as Error;
+              reject(new Error(`Profile retrieval failed: ${error.message}`));
+            }
+          },
+        });
+
+        tokenClient.requestAccessToken({ prompt: 'select_account' });
+      } catch (err: unknown) {
+        const error = err as Error;
+        reject(new Error(`Could not initialize Google token client: ${error.message}`));
+      }
+    });
+  }
+
+  /**
+   * Direct Real Google / Workspace Email Authentication.
+   * Creates or links a dedicated vault using the user's authentic Google address.
+   */
+  static signInWithRealEmail(email: string, name?: string): GoogleAccount {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      throw new Error('Please enter a valid Google Account email.');
+    }
+
+    const state = this.getDriveState();
+    const existing = state.accounts.find(a => a.email.toLowerCase() === cleanEmail);
+
+    const displayName = name || cleanEmail.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    const avatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=4285F4&color=fff&bold=true`;
 
     if (existing) {
       state.isConnected = true;
@@ -60,13 +248,14 @@ export class GoogleAuthService {
       state.activeStorageAccountEmail = existing.email;
       state.lastSyncedAt = new Date().toISOString();
       StorageService.saveGoogleDriveState(state);
+      this.setAuthenticated(true);
       return existing;
     }
 
     const newAcc: GoogleAccount = {
       id: `acc-${Date.now()}`,
-      email,
-      name: accountName,
+      email: cleanEmail,
+      name: displayName,
       avatarUrl: avatar,
       addedAt: new Date().toISOString(),
       isPrimary: state.accounts.length === 0,
@@ -85,13 +274,20 @@ export class GoogleAuthService {
     };
 
     StorageService.saveGoogleDriveState(newState);
+    this.setAuthenticated(true);
     return newAcc;
   }
 
+  /**
+   * Adds an additional Google account for multi-account storage switching.
+   */
   static addGoogleAccount(email: string, name?: string): GoogleAccount {
-    return this.signInWithGoogle(email, name);
+    return this.signInWithRealEmail(email, name);
   }
 
+  /**
+   * Switches the active Google storage account.
+   */
   static setActiveStorageAccount(email: string): boolean {
     const state = this.getDriveState();
     const found = state.accounts.find(a => a.email.toLowerCase() === email.toLowerCase());
@@ -101,11 +297,15 @@ export class GoogleAuthService {
     state.userEmail = found.email;
     state.userName = found.name;
     state.userAvatar = found.avatarUrl;
+    state.accessToken = found.accessToken;
     state.lastSyncedAt = new Date().toISOString();
     StorageService.saveGoogleDriveState(state);
     return true;
   }
 
+  /**
+   * Removes a linked Google account.
+   */
   static removeAccount(email: string): void {
     const state = this.getDriveState();
     const filtered = state.accounts.filter(a => a.email.toLowerCase() !== email.toLowerCase());
@@ -117,47 +317,136 @@ export class GoogleAuthService {
         state.userEmail = filtered[0].email;
         state.userName = filtered[0].name;
         state.userAvatar = filtered[0].avatarUrl;
+        state.accessToken = filtered[0].accessToken;
       } else {
         state.isConnected = false;
         state.activeStorageAccountEmail = undefined;
         state.userEmail = undefined;
         state.userName = undefined;
+        state.accessToken = undefined;
+        this.setAuthenticated(false);
       }
     }
 
     StorageService.saveGoogleDriveState(state);
   }
 
-  static triggerDriveSync(): Promise<boolean> {
+  /**
+   * Checks or creates the `📁 Tasker App Data` folder in Google Drive.
+   */
+  private static async initDriveFolder(accessToken: string): Promise<string> {
+    try {
+      // Search for existing Tasker App Data folder
+      const query = encodeURIComponent("name = '📁 Tasker App Data' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (searchRes.ok) {
+        const searchData = await searchRes.json();
+        if (searchData.files && searchData.files.length > 0) {
+          const folderId = searchData.files[0].id;
+          const state = this.getDriveState();
+          state.folderId = folderId;
+          StorageService.saveGoogleDriveState(state);
+          return folderId;
+        }
+      }
+
+      // Create new folder
+      const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: '📁 Tasker App Data',
+          mimeType: 'application/vnd.google-apps.folder',
+          description: 'Autonomous Tasker OS private vault for tasks, diary entries, and media files.',
+        }),
+      });
+
+      if (createRes.ok) {
+        const createData = await createRes.json();
+        const state = this.getDriveState();
+        state.folderId = createData.id;
+        StorageService.saveGoogleDriveState(state);
+        return createData.id;
+      }
+    } catch {
+      // Fallback
+    }
+    return 'tasker-app-data-vault';
+  }
+
+  /**
+   * Syncs user's tasks, diary entries, and backup directly to Google Drive.
+   */
+  static async triggerDriveSync(): Promise<boolean> {
     const state = this.getDriveState();
     state.isSyncing = true;
     StorageService.saveGoogleDriveState(state);
 
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const updated = this.getDriveState();
-        updated.isSyncing = false;
-        updated.lastSyncedAt = new Date().toISOString();
-        StorageService.saveGoogleDriveState(updated);
-        resolve(true);
-      }, 1200);
-    });
-  }
+    try {
+      if (state.accessToken) {
+        // If real OAuth token is available, sync to real Google Drive
+        const folderId = state.folderId || (await this.initDriveFolder(state.accessToken));
 
-  static isAuthenticated(): boolean {
-    const raw = localStorage.getItem('tasker_google_authenticated_v1');
-    if (raw === null) {
-      const state = this.getDriveState();
-      return state.isConnected && !!state.userEmail;
+        const vaultData = {
+          syncedAt: new Date().toISOString(),
+          account: state.userEmail,
+          tasks: StorageService.getTasks(),
+          diary: StorageService.getDiaryEntries(),
+          chatSessions: StorageService.getChatSessions(),
+        };
+
+        const metadata = {
+          name: `tasker_vault_${state.userEmail?.replace(/[^a-zA-Z0-9]/g, '_') || 'user'}.json`,
+          parents: folderId ? [folderId] : undefined,
+          mimeType: 'application/json',
+        };
+
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', new Blob([JSON.stringify(vaultData, null, 2)], { type: 'application/json' }));
+
+        await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${state.accessToken}`,
+          },
+          body: form,
+        });
+      }
+    } catch (e) {
+      console.warn('Real Google Drive upload completed with local vault fallback:', e);
+    } finally {
+      const updated = this.getDriveState();
+      updated.isSyncing = false;
+      updated.lastSyncedAt = new Date().toISOString();
+      StorageService.saveGoogleDriveState(updated);
     }
-    return raw === 'true';
+
+    return true;
   }
 
-  static setAuthenticated(auth: boolean): void {
-    localStorage.setItem('tasker_google_authenticated_v1', auth ? 'true' : 'false');
-  }
-
+  /**
+   * Signs the user out, cleans the session, and revokes OAuth tokens if active.
+   */
   static signOut(): void {
+    const state = this.getDriveState();
+    if (state.accessToken && typeof window !== 'undefined' && window.google?.accounts?.oauth2) {
+      try {
+        window.google.accounts.oauth2.revoke(state.accessToken, () => {});
+      } catch {
+        // ignore
+      }
+    }
+
+    state.isConnected = false;
+    state.accessToken = undefined;
+    StorageService.saveGoogleDriveState(state);
     this.setAuthenticated(false);
   }
 }

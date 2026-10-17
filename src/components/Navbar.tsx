@@ -12,7 +12,8 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  LogOut
 } from 'lucide-react';
 import { format, parseISO, addDays, subDays } from 'date-fns';
 import { GoogleDriveState, AIProvider } from '../types';
@@ -224,6 +225,17 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Settings className="w-4 h-4" />
           </button>
+
+          {/* Sign Out Button */}
+          {onSignOut && (
+            <button
+              onClick={onSignOut}
+              className="p-2 rounded-lg bg-slate-800/60 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-700/60 hover:border-rose-800/60 transition"
+              title="Sign Out of Google Account"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
       </div>

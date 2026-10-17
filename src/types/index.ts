@@ -141,12 +141,16 @@ export interface GoogleAccount {
   email: string;
   name: string;
   avatarUrl?: string;
+  accessToken?: string;
+  tokenExpiresAt?: number;
   addedAt: string;
   isPrimary?: boolean;
 }
 
 export interface GoogleDriveState {
   isConnected: boolean;
+  clientId?: string;
+  accessToken?: string;
   userEmail?: string;
   userName?: string;
   userAvatar?: string;
