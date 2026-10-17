@@ -19,7 +19,20 @@ import { AlarmService, ActiveAlarmTrigger } from './services/alarmService';
 import { AIBrokerService } from './services/aiBrokerService';
 import { TaskItem, GoogleDriveState, AIProvider } from './types';
 
+import { PrivacyPolicyView } from './components/PrivacyPolicyView';
+import { TermsOfServiceView } from './components/TermsOfServiceView';
+
 export function App() {
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+
+  if (currentPath === '/privacy') {
+    return <PrivacyPolicyView />;
+  }
+
+  if (currentPath === '/terms') {
+    return <TermsOfServiceView />;
+  }
+
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => GoogleAuthService.isAuthenticated());
   const [currentDate, setCurrentDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   // Calendar appears first after Google authentication
