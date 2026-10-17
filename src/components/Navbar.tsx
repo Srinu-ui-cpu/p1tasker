@@ -181,24 +181,46 @@ export const Navbar: React.FC<NavbarProps> = ({
             <kbd className="hidden lg:inline px-1.5 py-0.5 text-[10px] bg-slate-900 rounded border border-slate-700 text-slate-400">Ctrl K</kbd>
           </button>
 
-          {/* Google Account Storage Vault Pill */}
-          <button
-            onClick={onOpenSettings}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 text-xs transition"
-            title={`Active Storage: ${driveState.activeStorageAccountEmail || driveState.userEmail || 'Local'}. Click to manage Google accounts.`}
-          >
-            {driveState.userAvatar ? (
-              <img src={driveState.userAvatar} alt="Google Account" className="w-4 h-4 rounded-full ring-1 ring-emerald-400" />
-            ) : (
-              <div className="w-4 h-4 rounded-full bg-indigo-600 flex items-center justify-center text-[9px] font-bold text-white">
-                G
+          {/* Google Account Storage Vault & Explicit Sign Out */}
+          <div className="flex items-center gap-1.5 p-1 pl-2 pr-1.5 rounded-xl bg-slate-800/90 border border-slate-700/80 shadow-sm">
+            <button
+              onClick={onOpenSettings}
+              className="flex items-center gap-2 text-left hover:opacity-90 transition"
+              title={`Active Storage: ${driveState.activeStorageAccountEmail || driveState.userEmail || 'Local'}. Click to manage settings.`}
+            >
+              {driveState.userAvatar ? (
+                <img src={driveState.userAvatar} alt="Google Account" className="w-5 h-5 rounded-full ring-1 ring-emerald-400 shrink-0" />
+              ) : (
+                <div className="w-5 h-5 rounded-full bg-indigo-600 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                  {driveState.userName ? driveState.userName.charAt(0).toUpperCase() : 'G'}
+                </div>
+              )}
+              <div className="flex flex-col text-left leading-none max-w-[110px] sm:max-w-[180px]">
+                <span className="text-[11px] font-bold text-slate-100 truncate">
+                  {driveState.userName || driveState.userEmail?.split('@')[0] || 'User'}
+                </span>
+                <span className="text-[9px] text-slate-400 truncate font-mono mt-0.5">
+                  {driveState.activeStorageAccountEmail || driveState.userEmail || 'Google Drive'}
+                </span>
               </div>
+              <span 
+                className={`w-2 h-2 rounded-full shrink-0 ${driveState.isConnected ? 'bg-emerald-400 ring-2 ring-emerald-400/30' : 'bg-slate-500'}`} 
+                title={driveState.isConnected ? 'Google Drive Connected' : 'Local Storage'}
+              />
+            </button>
+
+            {/* Explicit Sign Out Button */}
+            {onSignOut && (
+              <button
+                onClick={onSignOut}
+                className="ml-1 px-2 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-white border border-rose-800/50 flex items-center gap-1 text-[11px] font-semibold transition"
+                title="Sign out & switch account"
+              >
+                <LogOut className="w-3.5 h-3.5 text-rose-400" />
+                <span className="hidden sm:inline">Sign Out</span>
+              </button>
             )}
-            <span className="hidden lg:inline text-[11px] font-medium text-slate-300 truncate max-w-[130px]">
-              {driveState.activeStorageAccountEmail || driveState.userEmail || 'Google Drive'}
-            </span>
-            <span className={`w-2 h-2 rounded-full ${driveState.isConnected ? 'bg-emerald-400 ring-2 ring-emerald-400/30' : 'bg-slate-500'}`} />
-          </button>
+          </div>
 
           {/* AI Toggle Button */}
           <button
@@ -225,17 +247,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Settings className="w-4 h-4" />
           </button>
-
-          {/* Sign Out Button */}
-          {onSignOut && (
-            <button
-              onClick={onSignOut}
-              className="p-2 rounded-lg bg-slate-800/60 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 border border-slate-700/60 hover:border-rose-800/60 transition"
-              title="Sign Out of Google Account"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          )}
         </div>
 
       </div>

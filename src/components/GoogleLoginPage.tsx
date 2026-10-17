@@ -13,9 +13,12 @@ import {
   ShieldCheck, 
   CheckCircle2, 
   Loader2,
-  FolderHeart,
+  Key,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Settings,
+  HelpCircle,
+  ExternalLink
 } from 'lucide-react';
 import { GoogleAuthService } from '../services/googleAuthService';
 
@@ -33,7 +36,12 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showDirectEmail, setShowDirectEmail] = useState(false);
 
-  // --- Official Google OAuth Flow (One-Click All Permissions) ---
+  // Client ID configuration
+  const [showClientIdConfig, setShowClientIdConfig] = useState(false);
+  const [clientIdInput, setClientIdInput] = useState(() => GoogleAuthService.getClientId());
+  const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // --- Official Google OAuth Flow ---
   const handleGoogleOAuth = async () => {
     setIsSubmitting(true);
     setIsGooglePopupActive(true);
@@ -55,10 +63,31 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
       const error = err as Error;
       setIsSubmitting(false);
       setIsGooglePopupActive(false);
-      setErrorMessage(
-        error.message || 'Google Sign-In was cancelled or failed. You can also sign in directly using your email below.'
-      );
+
+      const errStr = error.message || '';
+      if (errStr.includes('invalid_client') || errStr.includes('not found') || errStr.includes('401')) {
+        setShowClientIdConfig(true);
+        setErrorMessage(
+          'Google returned "The OAuth client was not found (Error 401: invalid_client)". This happens when your Google Cloud project has a new OAuth Client ID. Please copy your active Web Client ID from Google Cloud Console and paste it below.'
+        );
+      } else {
+        setErrorMessage(
+          error.message || 'Google Sign-In was cancelled or failed. You can also sign in directly using your email below.'
+        );
+      }
     }
+  };
+
+  // --- Save New Client ID ---
+  const handleSaveClientId = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanId = clientIdInput.trim();
+    if (!cleanId) return;
+
+    GoogleAuthService.saveClientId(cleanId);
+    setSavedSuccess(true);
+    setErrorMessage(null);
+    setTimeout(() => setSavedSuccess(false), 3000);
   };
 
   // --- Direct Email Vault Flow (Fallback / Instant Access) ---
@@ -226,8 +255,62 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
           </div>
         </div>
 
-        {/* COLLAPSIBLE ALTERNATIVE: DIRECT EMAIL VAULT */}
+        {/* GOOGLE CLIENT ID CONFIGURATION DRAWER (FOR ERROR 401 RESOLUTION) */}
         <div className="pt-2 border-t border-slate-800/80">
+          <button
+            type="button"
+            onClick={() => setShowClientIdConfig(!showClientIdConfig)}
+            className="w-full py-1.5 px-2 rounded-xl text-left text-[11px] flex items-center justify-between transition text-slate-400 hover:text-indigo-300"
+          >
+            <div className="flex items-center gap-1.5">
+              <Key className="w-3.5 h-3.5 text-amber-400" />
+              <span>Configure Google Cloud Client ID (For Error 401)</span>
+            </div>
+            {showClientIdConfig ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+
+          {showClientIdConfig && (
+            <div className="mt-2.5 p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3 text-xs animate-fade-in">
+              <div className="space-y-1">
+                <span className="font-bold text-white block">Active OAuth Client ID:</span>
+                <p className="text-[11px] text-slate-400">
+                  If you created a new OAuth client in Google Cloud Console, paste your Web Client ID below and click Save:
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={clientIdInput}
+                  onChange={(e) => setClientIdInput(e.target.value)}
+                  placeholder="xxxx.apps.googleusercontent.com"
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-[11px] font-mono text-slate-200 focus:outline-none focus:border-indigo-500"
+                />
+                <button
+                  type="button"
+                  onClick={handleSaveClientId}
+                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold transition"
+                >
+                  Save
+                </button>
+              </div>
+
+              {savedSuccess && (
+                <span className="text-[11px] text-emerald-400 font-semibold block">✔ Client ID updated! Click 'Sign in with Google' above.</span>
+              )}
+
+              <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-400 space-y-1">
+                <div>Where to find your Client ID:</div>
+                <div className="font-mono text-indigo-300">
+                  Google Cloud Console &gt; APIs &amp; Services &gt; Credentials &gt; OAuth 2.0 Client IDs
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* COLLAPSIBLE ALTERNATIVE: DIRECT EMAIL VAULT */}
+        <div className="pt-1">
           <button
             type="button"
             onClick={() => setShowDirectEmail(!showDirectEmail)}
@@ -235,7 +318,7 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
           >
             <div className="flex items-center gap-2">
               <Mail className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Or sign in with Google Email directly</span>
+              <span>Or sign in with Google Email directly (Instant)</span>
             </div>
             {showDirectEmail ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </button>
