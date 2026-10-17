@@ -24,69 +24,22 @@ export class StorageService {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.TASKS);
       if (!data) {
-        // Return default welcome tasks
-        const today = new Date().toISOString().split('T')[0];
-        const defaultTasks: TaskItem[] = [
-          {
-            id: 'task-1',
-            title: 'Design transaction tables architecture in project shdip',
-            description: 'Define schema, mapping rules, and relational indices for transaction persistence.',
-            date: today,
-            startTime: '10:00',
-            endTime: '11:30',
-            priority: 'high',
-            status: 'in_progress',
-            projectId: 'proj-work',
-            tags: ['architecture', 'database', 'shdip'],
-            subtasks: [
-              { id: 'sub-1', title: 'Complete schema mapping', completed: true },
-              { id: 'sub-2', title: 'Data flow analysis', completed: true },
-              { id: 'sub-3', title: 'Execute unit testing', completed: false },
-            ],
-            alarmEnabled: true,
-            attachments: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            id: 'task-2',
-            title: 'Weekly sprint review & client check-in',
-            description: 'Teams video conference with stakeholders.',
-            date: today,
-            startTime: '14:00',
-            endTime: '15:00',
-            priority: 'urgent',
-            status: 'todo',
-            projectId: 'proj-work',
-            tags: ['meeting', 'teams'],
-            subtasks: [],
-            alarmEnabled: true,
-            attachments: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          },
-          {
-            id: 'task-3',
-            title: '30-minute evening outdoor run',
-            description: 'Cardio workout and stretching.',
-            date: today,
-            startTime: '17:30',
-            endTime: '18:15',
-            priority: 'medium',
-            status: 'todo',
-            projectId: 'proj-health',
-            tags: ['workout', 'cardio'],
-            subtasks: [],
-            alarmEnabled: false,
-            attachments: [],
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          }
-        ];
-        this.saveTasks(defaultTasks);
-        return defaultTasks;
+        return [];
       }
-      return JSON.parse(data);
+      const parsed: TaskItem[] = JSON.parse(data);
+      // Cleanse any legacy mock seed tasks
+      const cleaned = parsed.filter(t => 
+        !t.id.startsWith('task-1') && 
+        !t.id.startsWith('task-2') && 
+        !t.id.startsWith('task-3') && 
+        !t.title.toLowerCase().includes('shdip') &&
+        !t.title.toLowerCase().includes('sprint review')
+      );
+      if (cleaned.length !== parsed.length) {
+        this.saveTasks(cleaned);
+        return cleaned;
+      }
+      return parsed;
     } catch (e) {
       console.error('Error loading tasks:', e);
       return [];
@@ -123,23 +76,21 @@ export class StorageService {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.DIARY);
       if (!data) {
-        const today = new Date().toISOString().split('T')[0];
-        const initialDiary: Record<string, DiaryEntry> = {
-          [today]: {
-            id: `diary-${today}`,
-            date: today,
-            content: `Productive day today. Completed transaction mapping analysis for project shdip. Meeting scheduled this afternoon on Teams to discuss deployment timelines. Need to make sure unit tests are completed tomorrow morning before release.`,
-            mood: 'great',
-            attachments: [],
-            aiSummary: 'Worked on project shdip transaction tables mapping and analysis. Prepping for unit testing.',
-            tags: ['shdip', 'milestone'],
-            updatedAt: new Date().toISOString(),
-          }
-        };
-        this.saveDiaryEntries(initialDiary);
-        return initialDiary;
+        return {};
       }
-      return JSON.parse(data);
+      const parsed: Record<string, DiaryEntry> = JSON.parse(data);
+      // Cleanse any legacy mock seed diary entries
+      let modified = false;
+      for (const key of Object.keys(parsed)) {
+        if (parsed[key].content && (parsed[key].content.toLowerCase().includes('shdip') || parsed[key].content.toLowerCase().includes('teams to discuss deployment'))) {
+          delete parsed[key];
+          modified = true;
+        }
+      }
+      if (modified) {
+        this.saveDiaryEntries(parsed);
+      }
+      return parsed;
     } catch (e) {
       console.error('Error loading diary entries:', e);
       return {};

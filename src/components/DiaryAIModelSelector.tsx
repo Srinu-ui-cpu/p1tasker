@@ -14,6 +14,8 @@ import {
 import { AIProvider, AIState } from '../types';
 import { AIBrokerService } from '../services/aiBrokerService';
 
+import { LocalAIModal } from './LocalAIModal';
+
 interface DiaryAIModelSelectorProps {
   onModelChanged?: (provider: AIProvider) => void;
   onOpenLocalAI?: () => void;
@@ -32,6 +34,7 @@ export const DiaryAIModelSelector: React.FC<DiaryAIModelSelectorProps> = ({
   const [editingProvider, setEditingProvider] = useState<AIProvider>(config.activeProvider);
   const [keyInput, setKeyInput] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
+  const [isLocalModalOpen, setIsLocalModalOpen] = useState(false);
 
   useEffect(() => {
     setConfig(AIBrokerService.getConfig());
@@ -263,15 +266,19 @@ export const DiaryAIModelSelector: React.FC<DiaryAIModelSelectorProps> = ({
           </div>
 
           {activeObj.id === 'local' ? (
-            onOpenLocalAI && (
-              <button
-                type="button"
-                onClick={onOpenLocalAI}
-                className="text-purple-400 hover:text-purple-300 font-semibold transition text-xs flex items-center gap-1 hover:underline"
-              >
-                <span>⚙️ Manage / Install Local Models</span>
-              </button>
-            )
+            <button
+              type="button"
+              onClick={() => {
+                if (onOpenLocalAI) {
+                  onOpenLocalAI();
+                } else {
+                  setIsLocalModalOpen(true);
+                }
+              }}
+              className="px-2.5 py-1 bg-purple-950/80 hover:bg-purple-900 border border-purple-800 text-purple-300 hover:text-white font-semibold transition text-xs rounded-xl flex items-center gap-1.5 shadow-sm"
+            >
+              <span>⚙️ {config.localAI.installed ? 'Manage Local Model' : 'Install Local AI'}</span>
+            </button>
           ) : (
             <button
               type="button"
@@ -286,6 +293,19 @@ export const DiaryAIModelSelector: React.FC<DiaryAIModelSelectorProps> = ({
             </button>
           )}
         </div>
+      )}
+
+      {/* Embedded Local AI Modal fallback if parent doesn't provide onOpenLocalAI */}
+      {!onOpenLocalAI && (
+        <LocalAIModal
+          isOpen={isLocalModalOpen}
+          onClose={() => setIsLocalModalOpen(false)}
+          onInstalled={() => {
+            const fresh = AIBrokerService.getConfig();
+            setConfig(fresh);
+            onModelChanged?.('local');
+          }}
+        />
       )}
     </div>
   );

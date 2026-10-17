@@ -29,8 +29,8 @@ declare global {
   }
 }
 
-// Default Google OAuth Client ID (can be overridden by user in settings or login screen)
-const DEFAULT_GOOGLE_CLIENT_ID = '358509827419-o4g10l70k2e646g1l3c18e00188uimka.apps.googleusercontent.com';
+// User's verified Google Cloud OAuth 2.0 Web Client ID
+const DEFAULT_GOOGLE_CLIENT_ID = '634475536724-0e7apq2ee7p3udvuktldtip5g54t2ru.apps.googleusercontent.com';
 const GOOGLE_AUTH_FLAG = 'tasker_google_authenticated_v2';
 const GOOGLE_CLIENT_ID_KEY = 'tasker_google_client_id_v2';
 
