@@ -30,7 +30,7 @@ declare global {
 }
 
 // User's verified Google Cloud OAuth 2.0 Web Client ID
-const DEFAULT_GOOGLE_CLIENT_ID = '634475536724-0e7apq2ee7p3udvuktldtip5g54t2ru.apps.googleusercontent.com';
+const DEFAULT_GOOGLE_CLIENT_ID = '634475536724-0e7apq2ee7p3udvuktuldtip5g54t2ru.apps.googleusercontent.com';
 const GOOGLE_AUTH_FLAG = 'tasker_google_authenticated_v2';
 const GOOGLE_CLIENT_ID_KEY = 'tasker_google_client_id_v2';
 
@@ -40,11 +40,19 @@ export class GoogleAuthService {
    */
   static getClientId(): string {
     const custom = localStorage.getItem(GOOGLE_CLIENT_ID_KEY);
+    // If custom is the old typo version or empty, reset to verified default
+    if (custom && custom.includes('uktldtip')) {
+      localStorage.setItem(GOOGLE_CLIENT_ID_KEY, DEFAULT_GOOGLE_CLIENT_ID);
+      return DEFAULT_GOOGLE_CLIENT_ID;
+    }
     if (custom && custom.trim().length > 10) {
       return custom.trim();
     }
     const state = StorageService.getGoogleDriveState();
-    return state.clientId || DEFAULT_GOOGLE_CLIENT_ID;
+    if (state.clientId && !state.clientId.includes('uktldtip')) {
+      return state.clientId;
+    }
+    return DEFAULT_GOOGLE_CLIENT_ID;
   }
 
   /**
