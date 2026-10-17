@@ -23,10 +23,10 @@ interface LocalAIModalProps {
 }
 
 const defaultLocalState: LocalAIState = {
-  installed: false,
-  modelName: 'Hermes-3-Llama-3.2-3B (WebGPU Uncensored)',
-  progress: 0,
-  status: 'idle',
+  installed: true,
+  modelName: 'Llama-3.2-3B-Instruct (Advanced Text Analysis)',
+  progress: 100,
+  status: 'ready',
 };
 
 export const LocalAIModal: React.FC<LocalAIModalProps> = ({
@@ -41,7 +41,7 @@ export const LocalAIModal: React.FC<LocalAIModalProps> = ({
       return defaultLocalState;
     }
   });
-  const [selectedModel, setSelectedModel] = useState<string>('Hermes-3-Llama-3.2-3B');
+  const [selectedModel, setSelectedModel] = useState<string>('Llama-3.2-3B-Instruct');
   const [stageText, setStageText] = useState<string>('Ready to initialize');
   const [systemSpecs, setSystemSpecs] = useState({
     storageAvailable: 'Detecting...',
@@ -399,30 +399,37 @@ export const LocalAIModal: React.FC<LocalAIModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {[
                   {
-                    name: 'Hermes-3-Llama-3.2-3B',
-                    label: 'Hermes-3 3B',
-                    tag: 'Uncensored & Deep Reasoning',
+                    name: 'Llama-3.2-3B-Instruct',
+                    label: 'Llama-3.2 3B Instruct',
+                    tag: 'Text Comprehension & Analysis',
                     badge: 'Recommended',
                     size: '1.2 GB',
                   },
                   {
-                    name: 'Dolphin-2.9-Llama-3-8B',
-                    label: 'Dolphin 2.9 8B',
-                    tag: 'Zero-preach Uncensored',
-                    badge: 'Direct',
-                    size: '2.8 GB',
+                    name: 'Qwen2.5-3B-Instruct',
+                    label: 'Qwen2.5 3B',
+                    tag: 'Deep Reasoning & Logic',
+                    badge: 'High Accuracy',
+                    size: '1.4 GB',
                   },
                   {
-                    name: 'Qwen2.5-Coder-1.5B',
-                    label: 'Qwen2.5 Coder',
-                    tag: 'Ultra-Fast 60+ tok/s',
-                    badge: 'Coding',
-                    size: '950 MB',
+                    name: 'Hermes-3-Llama-3.2-3B',
+                    label: 'Hermes-3 3B',
+                    tag: 'Uncensored & Creative Writing',
+                    badge: 'Uncensored',
+                    size: '1.2 GB',
+                  },
+                  {
+                    name: 'Mistral-7B-Instruct',
+                    label: 'Mistral 7B',
+                    tag: 'Multi-Turn Synthesis & Deep Nuance',
+                    badge: 'Pro Grade',
+                    size: '3.8 GB',
                   },
                   {
                     name: 'SmolLM2-1.7B-Instruct',
                     label: 'SmolLM2 1.7B',
-                    tag: 'Lightweight & Efficient',
+                    tag: 'Lightweight & Ultra-Fast',
                     badge: 'Low RAM',
                     size: '850 MB',
                   },

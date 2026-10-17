@@ -222,7 +222,7 @@ export const GlobalChatbotDrawer: React.FC<GlobalChatbotDrawerProps> = ({
         ? `${userText} [User attached media: ${currentMedia.map(m => m.name).join(', ')}]` 
         : userText;
 
-      const { responseText, modelUsed, artifact } = await AIBrokerService.queryGlobalChatbot(promptQuery);
+      const { responseText, modelUsed, artifact } = await AIBrokerService.queryGlobalChatbot(promptQuery, currentProvider);
 
       const dateMatches = responseText.match(/\[(\d{4}-\d{2}-\d{2})\]/g);
       const linkedDates = dateMatches ? dateMatches.map(m => m.replace(/[[\]]/g, '')) : [];
@@ -539,8 +539,58 @@ export const GlobalChatbotDrawer: React.FC<GlobalChatbotDrawerProps> = ({
             </div>
           )}
 
+          {/* Quick Model Selector Pills Bar */}
+          <div className="px-3 sm:px-4 py-2 bg-slate-950/90 border-t border-slate-800 flex items-center justify-between gap-2 overflow-x-auto text-[11px] shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mr-1">Model:</span>
+              {[
+                { id: 'local' as AIProvider, label: 'Local AI', icon: '🧠', tag: 'WebGPU Offline' },
+                { id: 'gemini' as AIProvider, label: 'Gemini', icon: '✨', tag: 'Google AI' },
+                { id: 'groq' as AIProvider, label: 'Groq', icon: '⚡', tag: 'Llama 70B' },
+                { id: 'custom' as AIProvider, label: 'xAI Grok', icon: '🚀', tag: 'grok-2' },
+                { id: 'openai' as AIProvider, label: 'OpenAI', icon: '🤖', tag: 'GPT-4o' },
+              ].map((m) => {
+                const isActive = currentProvider === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setCurrentProvider(m.id);
+                      const cfg = AIBrokerService.getConfig();
+                      cfg.activeProvider = m.id;
+                      AIBrokerService.saveConfig(cfg);
+                      if (m.id === 'local' && !cfg.localAI.installed) {
+                        setIsLocalModalOpen(true);
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded-xl font-medium transition flex items-center gap-1.5 shrink-0 border ${
+                      isActive
+                        ? 'bg-purple-950/90 text-purple-200 border-purple-500 shadow-sm shadow-purple-500/20 ring-1 ring-purple-500/30'
+                        : 'bg-slate-900 text-slate-400 hover:text-slate-200 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <span>{m.icon}</span>
+                    <span className="font-semibold">{m.label}</span>
+                    <span className="text-[9px] opacity-70 hidden md:inline font-mono">({m.tag})</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {currentProvider === 'local' && (
+              <button
+                type="button"
+                onClick={() => setIsLocalModalOpen(true)}
+                className="text-[10px] text-purple-400 hover:text-purple-300 font-medium flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-xl bg-purple-950/50 border border-purple-800/60 hover:bg-purple-900/40 transition"
+              >
+                <span>⚙️ Local Model</span>
+              </button>
+            )}
+          </div>
+
           {/* Bottom Chat Input Form */}
-          <form onSubmit={handleSendMessage} className="p-3 sm:p-4 bg-slate-950/90 border-t border-slate-800">
+          <form onSubmit={handleSendMessage} className="p-3 sm:p-4 bg-slate-950/90 border-t border-slate-800/60">
             <div className="flex items-center gap-2 bg-slate-900 border border-slate-700/80 rounded-2xl p-1.5 focus-within:border-indigo-500 transition shadow-inner">
               
               {/* Media Attachment Button */}

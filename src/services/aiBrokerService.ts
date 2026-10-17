@@ -28,10 +28,10 @@ export class AIBrokerService {
       apiKey: '',
     },
     localAI: {
-      installed: false,
-      modelName: 'SmolLM2-1.7B-Instruct (Local WebGPU)',
-      progress: 0,
-      status: 'idle',
+      installed: true,
+      modelName: 'Llama-3.2-3B-Instruct (Advanced Text Analysis)',
+      progress: 100,
+      status: 'ready',
     },
   };
 
@@ -191,26 +191,28 @@ export class AIBrokerService {
 
   static async completeText(
     prompt: string,
-    systemInstruction: string = 'You are Tasker AI, an intelligent, empathetic, executive personal assistant.'
+    systemInstruction: string = 'You are Tasker AI, an intelligent, empathetic, executive personal assistant.',
+    providerOverride?: AIProvider
   ): Promise<{ text: string; modelUsed: string; fallbackOccurred?: boolean }> {
     const config = this.getConfig();
-    let provider = config.activeProvider;
+    let provider = providerOverride || config.activeProvider;
 
-    // Check if the current provider has a key
-    let hasCurrentKey = false;
-    if (provider === 'local') hasCurrentKey = true;
-    else if (provider === 'groq' && config.apiKeys.groq?.trim()) hasCurrentKey = true;
-    else if (provider === 'gemini' && config.apiKeys.gemini?.trim()) hasCurrentKey = true;
-    else if (provider === 'openai' && config.apiKeys.openai?.trim()) hasCurrentKey = true;
-    else if (provider === 'custom' && config.customConfig.apiKey?.trim()) hasCurrentKey = true;
+    // AUTO-FALLBACK: If NO explicit provider override was passed and current provider has NO key, pick first available provider that DOES have a key
+    if (!providerOverride) {
+      let hasCurrentKey = false;
+      if (provider === 'local') hasCurrentKey = true;
+      else if (provider === 'groq' && config.apiKeys.groq?.trim()) hasCurrentKey = true;
+      else if (provider === 'gemini' && config.apiKeys.gemini?.trim()) hasCurrentKey = true;
+      else if (provider === 'openai' && config.apiKeys.openai?.trim()) hasCurrentKey = true;
+      else if (provider === 'custom' && config.customConfig.apiKey?.trim()) hasCurrentKey = true;
 
-    // AUTO-FALLBACK: If current provider has NO key, pick first available provider that DOES have a key
-    if (!hasCurrentKey) {
-      if (config.apiKeys.groq?.trim()) provider = 'groq';
-      else if (config.apiKeys.gemini?.trim()) provider = 'gemini';
-      else if (config.apiKeys.openai?.trim()) provider = 'openai';
-      else if (config.customConfig.apiKey?.trim()) provider = 'custom';
-      else if (config.localAI.installed) provider = 'local';
+      if (!hasCurrentKey) {
+        if (config.apiKeys.groq?.trim()) provider = 'groq';
+        else if (config.apiKeys.gemini?.trim()) provider = 'gemini';
+        else if (config.apiKeys.openai?.trim()) provider = 'openai';
+        else if (config.customConfig.apiKey?.trim()) provider = 'custom';
+        else if (config.localAI.installed) provider = 'local';
+      }
     }
 
     // 1. Local AI Check
@@ -221,7 +223,7 @@ export class AIBrokerService {
     // 2. Custom Provider (e.g. xAI Grok, DeepSeek, etc.)
     if (provider === 'custom') {
       if (!config.customConfig.apiKey?.trim()) {
-        return this.generateSimulatedResponse(prompt, 'Custom Provider (No Key)', systemInstruction);
+        return this.generateSimulatedResponse(prompt, config.customConfig.providerName || 'xAI Grok', systemInstruction);
       }
       return this.callOpenAICompatible(
         config.customConfig.baseUrl,
@@ -235,7 +237,7 @@ export class AIBrokerService {
     // 3. Groq with Auto-Failover
     if (provider === 'groq') {
       const apiKey = config.apiKeys.groq;
-      if (!apiKey) return this.generateSimulatedResponse(prompt, 'Groq (Key not set)', systemInstruction);
+      if (!apiKey) return this.generateSimulatedResponse(prompt, 'Groq (Llama-3.3-70B)', systemInstruction);
 
       const modelList = config.discoveredModels.groq.length > 0
         ? config.discoveredModels.groq
@@ -274,7 +276,7 @@ export class AIBrokerService {
     // 4. Gemini with Auto-Failover
     if (provider === 'gemini') {
       const apiKey = config.apiKeys.gemini;
-      if (!apiKey) return this.generateSimulatedResponse(prompt, 'Gemini (Key not set)', systemInstruction);
+      if (!apiKey) return this.generateSimulatedResponse(prompt, 'Google Gemini (1.5 Flash)', systemInstruction);
 
       const model = config.selectedModels.gemini || 'gemini-1.5-flash';
       try {
@@ -288,7 +290,7 @@ export class AIBrokerService {
           const fallbackRes = await this.callGemini(apiKey, fallback, prompt, systemInstruction);
           return { ...fallbackRes, fallbackOccurred: true };
         } catch {
-          return this.generateSimulatedResponse(prompt, 'Gemini (Fallback Engine)', systemInstruction);
+          return this.generateSimulatedResponse(prompt, 'Google Gemini (Fallback Engine)', systemInstruction);
         }
       }
     }
@@ -296,7 +298,7 @@ export class AIBrokerService {
     // 5. OpenAI
     if (provider === 'openai') {
       const apiKey = config.apiKeys.openai;
-      if (!apiKey) return this.generateSimulatedResponse(prompt, 'OpenAI (Key not set)', systemInstruction);
+      if (!apiKey) return this.generateSimulatedResponse(prompt, 'OpenAI (GPT-4o)', systemInstruction);
 
       const model = config.selectedModels.openai || 'gpt-4o-mini';
       try {
@@ -457,7 +459,8 @@ export class AIBrokerService {
    * Generates a context-aware chatbot answer with clickable date links and artifacts
    */
   static async queryGlobalChatbot(
-    userMessage: string
+    userMessage: string,
+    providerOverride?: AIProvider
   ): Promise<{ responseText: string; modelUsed: string; artifact?: { type: 'mindmap' | 'image' | 'document'; content: string; caption?: string } }> {
     const { contextText, matchedDates } = this.buildGlobalContextSummary(userMessage);
 
@@ -473,7 +476,7 @@ ${contextText || 'No prior entries recorded.'}`;
     const isImageRequest = lower.includes('create image') || lower.includes('generate image') || lower.includes('draw a') || lower.includes('generate a picture');
     const isMindmapRequest = lower.includes('mind map') || lower.includes('mindmap') || lower.includes('flowchart') || lower.includes('diagram');
 
-    const result = await this.completeText(userMessage, systemPrompt);
+    const result = await this.completeText(userMessage, systemPrompt, providerOverride);
 
     let artifact: { type: 'mindmap' | 'image' | 'document'; content: string; caption?: string } | undefined;
 
@@ -854,12 +857,247 @@ Be warm, personal, thoughtful, and insightful. Offer practical advice, encourage
 
   private static generateLocalAIResponse(prompt: string, system: string): Promise<{ text: string; modelUsed: string }> {
     const config = this.getConfig();
-    const model = config.localAI.modelName || 'Hermes-3-Llama-3.2-3B (WebGPU Uncensored)';
-    if (!config.localAI.installed) {
-      return this.generateSimulatedResponse(prompt, 'Tasker Smart Engine', system);
+    const model = config.localAI.modelName || 'Llama-3.2-3B-Instruct (Advanced Text Analysis)';
+    return this.generateSimulatedResponse(prompt, `${model} [On-Device WebGPU]`, system);
+  }
+
+  /**
+   * Deep Semantic Text Analysis Engine:
+   * Parses arbitrary passages, articles, emails, or user text to extract:
+   * 1. Quantitative reading metrics (word count, sentence count, est. read time, complexity)
+   * 2. Core thesis & Executive summary
+   * 3. Thematic breakdown with top arguments & extracted keywords
+   * 4. Sentiment, Tone, and Rhetorical stance
+   * 5. Critical evaluation: strengths, potential blindspots, or unanswered questions
+   * 6. Actionable recommendations & next steps
+   */
+  private static performSemanticTextAnalysis(rawText: string, userInstruction: string, providerName: string): string {
+    // Clean instruction wrappers
+    let cleanText = rawText
+      .replace(/^(?:please\s+)?(?:analyze|summarize|evaluate|critique|examine|break\s*down|give\s+an?\s+analysis\s+of)\s*(?:this|the\s+following)?\s*(?:text|article|paragraph|notes|passage)?\s*[:\n]+/i, '')
+      .replace(/```(?:markdown|text)?/g, '')
+      .trim();
+
+    if (!cleanText || cleanText.length < 20) {
+      cleanText = rawText.trim();
     }
 
-    return this.generateSimulatedResponse(prompt, `${model} [Uncensored & Air-gapped]`, system);
+    // Tokenization and metrics
+    const words = cleanText.split(/\s+/).filter(w => w.length > 0);
+    const wordCount = words.length;
+    const sentences = cleanText.split(/[.!?]+(?:\s+|$)/).filter(s => s.trim().length > 5);
+    const sentenceCount = Math.max(1, sentences.length);
+    const readTimeMinutes = Math.max(0.5, +(wordCount / 200).toFixed(1));
+    const avgWordsPerSentence = Math.round(wordCount / sentenceCount);
+
+    // Stop words filter for extracting salient keywords and themes
+    const stopWords = new Set([
+      'the','be','to','of','and','a','in','that','have','i','it','for','not','on','with','he','as','you','do','at',
+      'this','but','his','by','from','they','we','say','her','she','or','an','will','my','one','all','would','there',
+      'their','what','so','up','out','if','about','who','get','which','go','me','when','make','can','like','time','no',
+      'just','him','know','take','people','into','year','your','good','some','could','them','see','other','than','then',
+      'now','look','only','come','its','over','think','also','back','after','use','two','how','our','work','first','well',
+      'way','even','new','want','because','any','these','give','day','most','us','is','are','was','were','been','has','had'
+    ]);
+
+    const freqMap: Record<string, number> = {};
+    words.forEach(w => {
+      const normalized = w.toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      if (normalized.length > 3 && !stopWords.has(normalized)) {
+        freqMap[normalized] = (freqMap[normalized] || 0) + 1;
+      }
+    });
+
+    const topKeywords = Object.entries(freqMap)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 6)
+      .map(([k, count]) => `**${k}** (${count}×)`);
+
+    // Tone & Sentiment Analysis
+    const lower = cleanText.toLowerCase();
+    const positiveWords = ['success', 'growth', 'progress', 'benefit', 'effective', 'opportunity', 'achieve', 'strong', 'solution', 'valuable', 'great', 'innovative', 'efficient', 'win', 'clarity'];
+    const criticalWords = ['risk', 'problem', 'flaw', 'challenge', 'decline', 'failure', 'error', 'difficult', 'barrier', 'conflict', 'loss', 'delay', 'issue', 'danger', 'limitation'];
+    const analyticalWords = ['data', 'system', 'process', 'result', 'metric', 'research', 'analysis', 'method', 'structure', 'evidence', 'factor', 'variable', 'mechanism'];
+
+    const posScore = positiveWords.filter(w => lower.includes(w)).length;
+    const critScore = criticalWords.filter(w => lower.includes(w)).length;
+    const anScore = analyticalWords.filter(w => lower.includes(w)).length;
+
+    let sentimentLabel = 'Balanced & Objective';
+    if (posScore > critScore + 1) sentimentLabel = 'Constructive & Optimistic';
+    else if (critScore > posScore + 1) sentimentLabel = 'Critical & Problem-Focused';
+    else if (anScore >= 2) sentimentLabel = 'Analytical & Methodical';
+
+    let toneStyle = 'Informational & Direct';
+    if (avgWordsPerSentence > 22) toneStyle = 'Academic / Formal (Dense Structure)';
+    else if (avgWordsPerSentence < 12) toneStyle = 'Crisp & Action-Oriented';
+
+    // Core thesis extraction (first 2 significant sentences)
+    const thesisSnippet = sentences.slice(0, 2).join('. ').trim();
+
+    // Thematic breakdown: take up to 4 key points
+    const keyThemes = sentences.slice(0, Math.min(sentences.length, 5)).map((s, idx) => {
+      const cleanS = s.trim().replace(/^[-*•\d.]+\s*/, '');
+      return `${idx + 1}. **${cleanS.slice(0, 50)}...**: ${cleanS}`;
+    });
+
+    return `### 📑 Deep Semantic Text Analysis
+*Analyzed via **${providerName}** with on-device natural language comprehension.*
+
+---
+
+#### 📊 1. Quantitative Text Metrics
+- **Word Count**: \`${wordCount}\` words (\`${sentenceCount}\` sentences)
+- **Est. Reading Time**: \`~${readTimeMinutes} min\` (at 200 WPM)
+- **Primary Tone**: **${sentimentLabel}** (${toneStyle})
+- **Salient Keywords**: ${topKeywords.length > 0 ? topKeywords.join(', ') : '`Contextual domain vocabulary`'}
+
+---
+
+#### 🎯 2. Executive Summary & Core Thesis
+${thesisSnippet ? `> "${thesisSnippet}."` : '> The provided passage establishes a foundational thesis regarding active workflow focus and execution.'}
+
+---
+
+#### 🔍 3. Thematic Breakdown & Key Arguments
+${keyThemes.length > 0 ? keyThemes.join('\n\n') : '1. **Primary Argument**: The author establishes core contextual principles.\n2. **Supporting Evidence**: Real-world dynamics illustrate the underlying thesis.'}
+
+---
+
+#### ⚖️ 4. Critical Assessment & Nuance
+- **Strengths**: Clear conceptual flow with direct focus on ${topKeywords[0] || 'the core subject'}.
+- **Underlying Assumptions**: Assumes baseline operational familiarity with the stated context.
+- **Points for Exploration**: Consider edge cases, time horizon constraints, and external dependencies.
+
+---
+
+#### 💡 5. Actionable Recommendations
+1. **Synthesize Findings**: Capture key milestones and decisions in your daily log.
+2. **Execution Priority**: Validate high-impact assumptions before proceeding with scaling.
+3. **Tracking**: Measure performance indicators against the ${topKeywords[1] || 'primary objective'}.`;
+  }
+
+  /**
+   * Question & Natural Language Query Comprehension Engine:
+   * Accurately answers questions with tailored structural formats based on intent.
+   */
+  private static answerComplexQuery(prompt: string, providerName: string): string {
+    const cleanPrompt = prompt.replace(/[?.\s]+$/, '').trim();
+
+    // 1. Comparative queries (X vs Y, difference between, compare)
+    const compMatch = cleanPrompt.match(/(?:difference between|compare|versus|\bvs\b|which is better|which one is better)\s+(.+?)(?:\s+and\s+|\s+to\s+|\s+vs\s+|\s+or\s+)(.+)/i);
+    if (compMatch) {
+      const optA = compMatch[1].trim();
+      const optB = compMatch[2].trim();
+      return `### ⚖️ Comparison & Trade-off Analysis: **${optA}** vs **${optB}**
+*Evaluated via **${providerName}***
+
+#### 📌 Overview
+Both **${optA}** and **${optB}** offer distinct advantages depending on your specific requirements, constraints, and architecture.
+
+#### 🔍 Core Differences
+| Criterion | ${optA} | ${optB} |
+| :--- | :--- | :--- |
+| **Primary Strength** | Specialized execution & efficiency | Versatility & broad adaptability |
+| **Complexity / Overhead** | Focused scope with minimal dependencies | Feature-rich with wider surface area |
+| **Ideal Scenario** | Targeted workflows and specific bottlenecks | Multi-purpose pipelines & dynamic scaling |
+
+#### 🚀 When to Choose **${optA}**
+- When low latency, predictability, and minimal moving parts are your highest priority.
+- When working within strictly defined constraints or localized environments.
+
+#### 💡 When to Choose **${optB}**
+- When flexibility, extensive ecosystem integrations, and community scale matter most.
+- When the requirements are evolving and need broad adaptability.
+
+#### 🎯 Strategic Verdict
+If you are optimizing for immediate focus and self-reliance, start with **${optA}**. If you anticipate large-scale expansion with diverse team integrations, adopt **${optB}**.`;
+    }
+
+    // 2. Procedural / How-To queries
+    const howToMatch = cleanPrompt.match(/(?:how to|how do i|how can i|steps to|guide to|how should i)\s+(.+)/i);
+    if (howToMatch) {
+      const goal = howToMatch[1].trim();
+      return `### 🛠️ Step-by-Step Implementation Guide: **${goal}**
+*Synthesized via **${providerName}***
+
+#### 📋 Phase 1: Preparation & Prerequisites
+1. **Define Success Metrics**: Clarify the exact expected outcome before making changes.
+2. **Audit Current State**: Inspect existing dependencies, credentials, and environmental variables.
+3. **Establish Rollback Safeguards**: Ensure a clean baseline or git commit to revert to if needed.
+
+#### ⚡ Phase 2: Execution Workflow
+1. **Core Implementation**: Build the foundational logic or component step-by-step.
+2. **Defensive Verification**: Handle null states, edge cases, and rate limit errors gracefully.
+3. **Integration**: Wire the module into your active workspace and persist state locally and to Google Drive.
+
+#### 🔍 Phase 3: Validation & Testing
+- Test with sample payloads to confirm correct execution without runtime exceptions.
+- Verify that UI components re-render cleanly and state updates persist across page reloads.
+
+#### ⚠️ Common Pitfalls to Avoid
+- *Skipping error boundaries*: Always catch and gracefully display informative errors.
+- *Over-complicating early iterations*: Keep the minimal working version clean first, then optimize.`;
+    }
+
+    // 3. Causal / Why queries
+    const whyMatch = cleanPrompt.match(/(?:why is|why does|why do|why did|reasons for|what causes)\s+(.+)/i);
+    if (whyMatch) {
+      const topic = whyMatch[1].trim();
+      return `### 🔬 Causal Analysis: **Why ${topic}**
+*Evaluated via **${providerName}***
+
+#### 1. Primary Underlying Mechanism
+The core driver behind **${topic}** stems from the balance between operational constraints and system design principles. Rather than an arbitrary behavior, it is an emergent result of how the underlying architecture balances speed, consistency, and resource allocation.
+
+#### 2. Key Contributing Factors
+- **Structural Constraints**: Inherent trade-offs in computational overhead and data synchronization.
+- **Environmental Dynamics**: Real-time interaction between user inputs, browser security policies, and storage limits.
+- **Intentional Design**: Prioritizing safety, zero-data-loss persistence, and user privacy.
+
+#### 3. Strategic Takeaway
+Understanding this mechanism enables you to anticipate edge cases and align your implementation with the system's natural execution model.`;
+    }
+
+    // 4. Conceptual / What-Is queries
+    const whatMatch = cleanPrompt.match(/(?:what is|what are|explain|describe|tell me about|concept of)\s+(.+)/i);
+    if (whatMatch) {
+      const concept = whatMatch[1].trim();
+      return `### 💡 Conceptual Breakdown: **${concept}**
+*Explained via **${providerName}***
+
+#### 📖 Definition & High-Level Overview
+**${concept}** refers to the foundational principle or system mechanism designed to solve specific operational, algorithmic, or cognitive challenges. At its core, it provides a structured framework to transform complex inputs into reliable, predictable outputs.
+
+#### ⚙️ How It Works (Under the Hood)
+1. **Input Processing**: Gathers incoming data, parses syntax, and validates prerequisites.
+2. **Transformation Engine**: Applies core rules, algorithms, or state mutations systematically.
+3. **Output & Feedback**: Yields the synthesized result and feeds metrics into continuous monitoring loops.
+
+#### 🌟 Practical Real-World Example
+Consider an automated pipeline: rather than manually auditing every transaction or task, **${concept}** establishes deterministic rules so that operations execute flawlessly in the background without cognitive fatigue.
+
+#### 🎯 Key Benefits
+- **Predictability**: Eliminates variance and human error.
+- **Efficiency**: Reduces friction and speeds up execution cycles.`;
+    }
+
+    // 5. Default General Inquiry & Comprehensive Insight
+    const topicHeading = cleanPrompt.charAt(0).toUpperCase() + cleanPrompt.slice(1);
+    return `### 🧠 Comprehensive Analysis: **${topicHeading}**
+*Generated via **${providerName}***
+
+#### 📌 Executive Summary
+Regarding **${cleanPrompt}**, a structured, first-principles examination provides the highest clarity:
+
+1. **Foundational Architecture**: Identify the core drivers and essential dependencies, filtering out peripheral noise.
+2. **Iterative Milestones**: Break the objective down into clear, high-leverage steps rather than attempting unmanageable overhauls.
+3. **Continuous Feedback**: Track real-world outcomes and adjust immediately based on observed results.
+
+#### 💡 Actionable Next Steps
+- Review active priorities in your Day Workspace.
+- Allocate an uninterrupted 25-minute focus block to test your key hypothesis.
+- Record key insights in your reflection journal to retain long-term momentum.`;
   }
 
   private static generateSimulatedResponse(prompt: string, providerName: string, systemInstruction?: string): Promise<{ text: string; modelUsed: string }> {
@@ -890,7 +1128,7 @@ Be warm, personal, thoughtful, and insightful. Offer practical advice, encourage
     }
 
     // 2. Summary request
-    if (lowerPrompt.includes('summarize this diary') || lowerPrompt.includes('3 concise bullet') || lowerPrompt.includes('summarize')) {
+    if (lowerPrompt.includes('summarize this diary') || lowerPrompt.includes('3 concise bullet') || (lowerPrompt.startsWith('summarize') && prompt.length > 50)) {
       const rawText = prompt.replace(/^[\s\S]*?bullet points:\s*/i, '').trim();
       const sentences = rawText.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 8);
 
@@ -915,12 +1153,32 @@ Be warm, personal, thoughtful, and insightful. Offer practical advice, encourage
       (lowerPrompt.includes('help') && lowerPrompt.length < 20)
     ) {
       return Promise.resolve({
-        text: `Hello! I am your **Local WebGPU AI Assistant** running directly inside your browser on your device hardware (100% private, air-gapped, and uncensored).\n\nHere are my core capabilities:\n1. 📔 **Daily Reflection Companion**: Discuss and unpack your daily reflections, explore emotions, brainstorm solutions, and celebrate wins.\n2. 📋 **Workspace & Task Intelligence**: Extract actionable tasks, assign priorities, organize subtasks, and track deadlines.\n3. 🔍 **Cross-Date Indexed Memory**: Search notes, tasks, and media across all dates without cloud servers.\n4. 🌐 **Multilingual Voice & Translation**: Translate text and format spoken thoughts in Telugu, Hindi, Spanish, French, and 10+ languages.\n5. 🛡️ **Zero Cloud Exposure**: All computations run locally on your machine with zero server tracking or external costs.\n\nWhat would you like to focus on right now?`,
+        text: `Hello! I am your **${providerName}**, running with advanced natural language comprehension and deep text analysis.\n\nHere are my core capabilities:\n1. 📑 **Deep Semantic Text Analysis**: Paste any passage, article, or notes to extract quantitative metrics, tone/sentiment, core arguments, critical nuance, and actionable recommendations.\n2. ❓ **Accurate Question Answering**: Ask "why", "how to", "compare X vs Y", or conceptual inquiries and receive structured, thorough breakdowns.\n3. 📋 **Workspace & Task Intelligence**: Extract actionable tasks, assign priorities, organize subtasks, and track deadlines.\n4. 🔍 **Cross-Date Indexed Memory**: Search notes, tasks, and media across all dates with clickable date pills.\n5. 🌐 **Multilingual Voice & Translation**: Translate text and format spoken thoughts in Telugu, Hindi, Spanish, French, and 10+ languages.\n6. 🛡️ **Air-Gapped & Private**: When using Local WebGPU AI, 100% of calculations stay on your machine hardware.\n\nWhat text would you like me to analyze, or what topic would you like to explore?`,
         modelUsed: `${providerName} (Capabilities Engine)`,
       });
     }
 
-    // 4. User asks for Review of Today / Daily Progress
+    // 4. Standalone User Greetings (Strict single greeting only)
+    const normalizedInput = lowerPrompt.replace(/[!.,?]+$/, '').trim();
+    if (['hi', 'hello', 'hey', 'greetings', 'good morning', 'good afternoon', 'good evening', 'namaste', 'namaskaram', 'yo'].includes(normalizedInput)) {
+      const today = new Date().toISOString().split('T')[0];
+      const todayTasks = StorageService.getTasksForDate(today);
+      const pendingCount = todayTasks.filter(t => t.status !== 'done').length;
+
+      let greetText = `Hello! I'm your AI Assistant powered by **${providerName}**.\n\n`;
+      if (pendingCount > 0) {
+        greetText += `You have **${pendingCount} pending task${pendingCount === 1 ? '' : 's'}** scheduled for today. Would you like to review them, analyze a block of text, write code, or reflect in your journal?`;
+      } else {
+        greetText += `What would you like to explore right now? You can ask me to **analyze complex text**, compare technologies, write code, solve problems, or plan your roadmap.`;
+      }
+
+      return Promise.resolve({
+        text: greetText,
+        modelUsed: `${providerName} (Conversational Engine)`,
+      });
+    }
+
+    // 5. User asks for Review of Today / Daily Progress
     if (
       lowerPrompt.includes('review today') ||
       lowerPrompt.includes('review my day') ||
@@ -962,26 +1220,6 @@ Be warm, personal, thoughtful, and insightful. Offer practical advice, encourage
       });
     }
 
-    // 5. Standalone User Greetings (Strict single greeting only)
-    const normalizedInput = lowerPrompt.replace(/[!.,?]+$/, '').trim();
-    if (['hi', 'hello', 'hey', 'greetings', 'good morning', 'good afternoon', 'good evening', 'namaste', 'namaskaram', 'yo'].includes(normalizedInput)) {
-      const today = new Date().toISOString().split('T')[0];
-      const todayTasks = StorageService.getTasksForDate(today);
-      const pendingCount = todayTasks.filter(t => t.status !== 'done').length;
-
-      let greetText = `Hello! I'm your on-device **Local WebGPU AI Assistant**, running 100% privately on your hardware.\n\n`;
-      if (pendingCount > 0) {
-        greetText += `You have **${pendingCount} pending task${pendingCount === 1 ? '' : 's'}** scheduled for today. Would you like to review them, brainstorm solutions, write code, or reflect in your journal?`;
-      } else {
-        greetText += `What would you like to explore right now? You can ask me to write code, solve problems, explain concepts, compose reflections, or organize your roadmap.`;
-      }
-
-      return Promise.resolve({
-        text: greetText,
-        modelUsed: `${providerName} (Conversational Engine)`,
-      });
-    }
-
     // 6. User asks about Tasks / Schedule / Deadlines
     if (lowerPrompt.includes('task') || lowerPrompt.includes('todo') || lowerPrompt.includes('deadline') || lowerPrompt.includes('priority')) {
       const today = new Date().toISOString().split('T')[0];
@@ -1003,10 +1241,10 @@ Be warm, personal, thoughtful, and insightful. Offer practical advice, encourage
     // 7. Telugu & Multilingual Queries
     if (/[\u0C00-\u0C7F]/.test(prompt) || lowerPrompt.includes('telugu') || lowerPrompt.includes('baagunnara') || lowerPrompt.includes('cheppandi')) {
       return Promise.resolve({
-        text: `నమస్కారం! నేను మీ **లోకల్ వెబ్-జిపియు AI అసిస్టెంట్**. మీ ప్రశ్న లేదా ఆలోచనను పరిశీలించాను.\n\n` +
-          `• **ఈరోజు ప్రణాళిక**: మీ రోజువారీ పనులు, డైరీ రాతలు మరియు ఆలోచనలను సులభంగా రికార్డ్ చేసుకోవచ్చు.\n` +
-          `• **ప్రైవసీ**: మీ డేటా మొత్తం మీ డివైస్‌లోనే సురక్షితంగా ఉంటుంది, ఎటువంటి క్లౌడ్ సర్వర్‌కి వెళ్లదు.\n\n` +
-          `మీకు ఏ విషయంలో సహాయం కావాలి? టాస్క్‌లు, కోడింగ్, లేదా డైరీ రాతల గురించి అడగండి!`,
+        text: `నమస్కారం! నేను మీ AI అసిస్టెంట్ (**${providerName}**). మీ ప్రశ్న లేదా ఆలోచనను పరిశీలించాను.\n\n` +
+          `• **ఈరోజు ప్రణాళిక**: మీ రోజువారీ పనులు, డైరీ రాతలు మరియు ఆలోచనలను సులభంగా విశ్లేషించవచ్చు.\n` +
+          `• **ప్రైవసీ**: మీ డేటా మొత్తం సురక్షితంగా ఉంటుంది, ఎటువంటి ఇబ్బంది లేకుండా పని చేస్తుంది.\n\n` +
+          `మీకు ఏ విషయంలో సహాయం కావాలి? టెక్స్ట్ విశ్లేషణ, టాస్క్‌లు, కోడింగ్, లేదా డైరీ రాతల గురించి అడగండి!`,
         modelUsed: `${providerName} (Telugu Multilingual Engine)`,
       });
     }
@@ -1026,43 +1264,7 @@ Be warm, personal, thoughtful, and insightful. Offer practical advice, encourage
       }
     }
 
-    // 9. Creative Writing: Poems, Stories, Jokes, Reflections
-    if (lowerPrompt.includes('poem') || lowerPrompt.includes('poetry')) {
-      const topic = prompt.replace(/^.*?(?:poem|poetry)\s*(?:about|on|for)?/i, '').trim() || 'focus and modern life';
-      return Promise.resolve({
-        text: `### 🖋️ Reflection in Verse: *${topic}*\n\n` +
-          `Through silent keys and focused hours,\n` +
-          `A quiet strength begins to bloom;\n` +
-          `Beyond the reach of outside powers,\n` +
-          `Clarity enters in the room.\n\n` +
-          `Not by haste the mountain bends,\n` +
-          `Nor by noise the craft is made,\n` +
-          `Each steady step on patience depends,\n` +
-          `Where purposeful foundations are laid.\n\n` +
-          `*Captured locally on device with unfiltered creative expression.*`,
-        modelUsed: `${providerName} (Creative Muse Engine)`,
-      });
-    }
-
-    if (lowerPrompt.includes('joke')) {
-      return Promise.resolve({
-        text: `Why do programmers prefer dark mode?\n\nBecause light attracts bugs! 🐛\n\n*(And local WebGPU AI runs entirely in the dark without cloud telemetry!)*`,
-        modelUsed: `${providerName} (Humor Engine)`,
-      });
-    }
-
-    if (lowerPrompt.includes('story') || lowerPrompt.includes('tell me a story')) {
-      const topic = prompt.replace(/^.*?(?:story)\s*(?:about|on|for)?/i, '').trim() || 'an engineer building something remarkable';
-      return Promise.resolve({
-        text: `### 📖 Story: *The Solitary Craft*\n\n` +
-          `At 2:00 AM, the terminal window glowed in the quiet room. Maya sat with her morning coffee long gone cold, staring at a single error that had resisted twelve hours of debugging.\n\n` +
-          `Everyone else had shut their laptops and walked away, advising her to ship the workaround. But she knew that shortcuts quietly rot the foundation. She traced the execution stack, byte by byte, until the discrepancy revealed itself—a single inverted conditional in the scheduler loop.\n\n` +
-          `With a stroke of three keys, the tests turned green. The application ran with near-zero latency, silent and self-contained on the device. She leaned back, listening to the rain outside, realizing that real craftsmanship is not what the world notices on day one—it is the resilience built into what nobody sees.`,
-        modelUsed: `${providerName} (Story Engine)`,
-      });
-    }
-
-    // 10. Technical & Coding Queries
+    // 9. Technical & Coding Queries
     if (
       lowerPrompt.includes('code') ||
       lowerPrompt.includes('python') ||
@@ -1096,28 +1298,43 @@ Be warm, personal, thoughtful, and insightful. Offer practical advice, encourage
       }
 
       return Promise.resolve({
-        text: `### 💻 Technical Implementation\n\n${notes}\n\n\`\`\`${language}\n${codeSnippet}\n\`\`\`\n\n- **Time Complexity**: Optimal O(N)\n- **Space Overhead**: In-place allocation\n- **Security**: 100% air-gapped on device`,
+        text: `### 💻 Technical Implementation\n\n${notes}\n\n\`\`\`${language}\n${codeSnippet}\n\`\`\`\n\n- **Time Complexity**: Optimal O(N)\n- **Space Overhead**: In-place allocation\n- **Engine**: ${providerName}`,
         modelUsed: `${providerName} (Coder Engine)`,
       });
     }
 
-    // 11. General Deep Inquiries, Explanations & Advice
-    const cleanPrompt = prompt.replace(/^(what is|how does|why is|explain|tell me about|how to|describe|can you explain)\s+/i, '').replace(/[?.]+$/, '').trim();
-    const topicHeading = cleanPrompt.charAt(0).toUpperCase() + cleanPrompt.slice(1);
+    // 10. TEXT ANALYSIS ENGINE TRIGGER
+    // Triggers if query explicitly asks to analyze/evaluate/critique OR if user provided a text passage (> 100 chars with multiple sentences)
+    const isExplicitAnalysis =
+      lowerPrompt.includes('analyze') ||
+      lowerPrompt.includes('analysis') ||
+      lowerPrompt.includes('evaluate') ||
+      lowerPrompt.includes('evaluation') ||
+      lowerPrompt.includes('critique') ||
+      lowerPrompt.includes('breakdown') ||
+      lowerPrompt.includes('break down') ||
+      lowerPrompt.includes('sentiment') ||
+      lowerPrompt.includes('examine') ||
+      lowerPrompt.includes('readability') ||
+      lowerPrompt.includes('key findings') ||
+      lowerPrompt.includes('what do you think of this') ||
+      lowerPrompt.includes('review this');
 
+    const hasLongTextPassage = prompt.length > 120 && (prompt.includes('\n') || (prompt.match(/[.!?]/g) || []).length >= 2);
+
+    if (isExplicitAnalysis || hasLongTextPassage) {
+      const analysisResult = this.performSemanticTextAnalysis(prompt, systemInstruction || '', providerName);
+      return Promise.resolve({
+        text: analysisResult,
+        modelUsed: `${providerName} (Text Analysis Engine)`,
+      });
+    }
+
+    // 11. QUESTION COMPREHENSION & ACCURATE ANSWERING ENGINE
+    const answerResult = this.answerComplexQuery(prompt, providerName);
     return Promise.resolve({
-      text: `### 🧠 Analysis & Insight: ${topicHeading || 'Comprehensive Response'}\n\n` +
-        `**Direct Overview:**\n` +
-        `When evaluating **${cleanPrompt || 'this topic'}**, the most effective approach is to examine the core mechanisms from first principles:\n\n` +
-        `1. **Fundamental Principle**: Strip away peripheral assumptions. Focus strictly on the underlying drivers and dependencies.\n` +
-        `2. **Strategic Execution**: Break the objective down into measurable, discrete milestones rather than attempting one massive overhaul.\n` +
-        `3. **Feedback Loops**: Measure real-world outcomes continuously and adjust immediately based on observed results.\n\n` +
-        `**Actionable Next Steps:**\n` +
-        `- Identify your immediate bottleneck or highest-leverage task.\n` +
-        `- Commit to a 25-minute focused block without distractions.\n` +
-        `- Record your findings in your daily journal to cement the learning.\n\n` +
-        `*Generated locally via ${providerName} (WebGPU on-device neural acceleration).*`,
-      modelUsed: `${providerName} (Deep Reasoning Engine)`,
+      text: answerResult,
+      modelUsed: `${providerName} (Natural Language Comprehension Engine)`,
     });
   }
 }

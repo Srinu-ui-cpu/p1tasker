@@ -90,12 +90,12 @@ export const DiaryAIModelSelector: React.FC<DiaryAIModelSelectorProps> = ({
     },
     {
       id: 'custom',
-      name: config.customConfig.providerName || 'Custom Provider',
-      model: config.customConfig.modelName || 'custom-model',
+      name: config.customConfig.providerName || 'xAI Grok',
+      model: config.customConfig.modelName || 'grok-2-latest',
       hasKey: !!config.customConfig.apiKey?.trim(),
       keySnippet: config.customConfig.apiKey ? `...${config.customConfig.apiKey.slice(-4)}` : undefined,
-      badge: 'Custom URL',
-      hint: 'xAI Grok / DeepSeek',
+      badge: 'xAI Grok',
+      hint: 'xAI Grok / Custom API',
     },
   ];
 
