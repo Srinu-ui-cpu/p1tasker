@@ -399,6 +399,8 @@ export class GoogleAuthService {
           tasks: StorageService.getTasks(),
           diary: StorageService.getDiaryEntries(),
           chatSessions: StorageService.getChatSessions(),
+          aiConfig: localStorage.getItem('tasker_ai_config_v1') ? JSON.parse(localStorage.getItem('tasker_ai_config_v1')!) : null,
+          fileRegistry: StorageService.getFileRegistry(),
         };
 
         const metadata = {

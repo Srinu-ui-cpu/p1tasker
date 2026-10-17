@@ -457,6 +457,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               </div>
 
+              {/* Google Drive Cloud AI Keys Sync & Purge */}
+              <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-bold text-sm text-slate-200 block">Cloud Drive AI Keys Storage</span>
+                    <p className="text-xs text-slate-400">Save your encrypted AI API keys to your Google Drive vault, or purge them anytime.</p>
+                  </div>
+                  <Cloud className="w-5 h-5 text-indigo-400 shrink-0" />
+                </div>
+
+                <div className="flex items-center gap-2 pt-1 flex-wrap">
+                  <button
+                    onClick={async () => {
+                      setIsTesting(true);
+                      setTestResult('Syncing AI keys to Google Drive vault...');
+                      await GoogleAuthService.triggerDriveSync();
+                      setIsTesting(false);
+                      setTestResult('✔ AI API Keys successfully saved & synced to Google Drive vault!');
+                      setTimeout(() => setTestResult(null), 4000);
+                    }}
+                    className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-indigo-600/30"
+                  >
+                    <Cloud className="w-4 h-4" />
+                    <span>Save & Sync Keys to Drive Vault</span>
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      if (confirm('Are you sure you want to delete all AI API keys from local storage and from your Google Drive cloud vault?')) {
+                        AIBrokerService.purgeAllApiKeys();
+                        setAIConfig(AIBrokerService.getConfig());
+                        onConfigUpdated();
+                        setTestResult('✔ All AI API keys have been deleted from local storage and purged from Google Drive vault!');
+                        setTimeout(() => setTestResult(null), 4000);
+                      }
+                    }}
+                    className="py-2 px-3 bg-rose-950 hover:bg-rose-900 text-rose-300 border border-rose-800/80 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 hover:text-white"
+                  >
+                    <Trash2 className="w-4 h-4 text-rose-400" />
+                    <span>Purge Keys from Drive</span>
+                  </button>
+                </div>
+              </div>
+
               {testResult && (
                 <div className="p-3 bg-indigo-950/80 text-indigo-200 rounded-xl text-xs border border-indigo-800">
                   {testResult}

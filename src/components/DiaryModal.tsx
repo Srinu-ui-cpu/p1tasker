@@ -16,7 +16,9 @@ import {
   BrainCircuit, 
   Smile, 
   CheckSquare,
-  Bot
+  Bot,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { DiaryEntry, Mood, FileAttachment, Priority } from '../types';
 import { StorageService } from '../services/storageService';
@@ -210,6 +212,32 @@ export const DiaryModal: React.FC<DiaryModalProps> = ({
       }
       setTimeout(() => setDedupNotice(null), 4000);
     }
+  };
+
+  const [fileToDelete, setFileToDelete] = useState<FileAttachment | null>(null);
+
+  const handleConfirmDeleteAttachment = async () => {
+    if (!fileToDelete) return;
+    const toRemove = fileToDelete;
+    setFileToDelete(null);
+
+    StorageService.deleteDiaryAttachment(date, toRemove.id);
+    const updated = StorageService.getDiaryForDate(date);
+    setEntry(updated);
+
+    // Sync removal to Google Drive cloud vault
+    try {
+      import('../services/googleAuthService').then(({ GoogleAuthService }) => {
+        if (GoogleAuthService.isAuthenticated()) {
+          GoogleAuthService.triggerDriveSync().catch(() => {});
+        }
+      });
+    } catch {
+      // ignore
+    }
+
+    setAiNotification(`✔ Deleted "${toRemove.name}" from diary & Google Drive vault!`);
+    setTimeout(() => setAiNotification(null), 3500);
   };
 
   // --- ✍️ AUTO CORRECT GRAMMAR ---
@@ -564,21 +592,60 @@ ${entry.content}`;
             </div>
           )}
 
-          {/* Attachments Section */}
+          {/* Attachments Section with compact preview thumbnails & "X" delete button */}
           {entry.attachments.length > 0 && (
-            <div>
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block mb-2">Attached Documents & Media</span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                  Attached Documents & Media ({entry.attachments.length})
+                </span>
+                <span className="text-[10px] text-slate-500 font-mono">Synced to Drive Vault</span>
+              </div>
+
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {entry.attachments.map((file) => (
-                  <div key={file.id} className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700 flex items-center gap-2">
-                    {file.type.startsWith('image') ? (
-                      <ImageIcon className="w-4 h-4 text-purple-400 shrink-0" />
+                  <div 
+                    key={file.id} 
+                    className="relative group rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-800/80 shadow-md hover:border-slate-600 transition"
+                  >
+                    {/* Delete "X" Button on Top Right */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFileToDelete(file);
+                      }}
+                      className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full bg-slate-950/85 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center transition shadow-lg border border-slate-700/60 hover:border-rose-500"
+                      title={`Delete ${file.name} from diary and Drive`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+
+                    {/* Thumbnail Preview Area (compact size, NOT original giant size) */}
+                    {file.type.startsWith('image') && file.dataUrl ? (
+                      <div className="w-full h-24 sm:h-28 bg-slate-950 flex items-center justify-center overflow-hidden">
+                        <img 
+                          src={file.dataUrl} 
+                          alt={file.name} 
+                          className="w-full h-full object-cover transition group-hover:scale-105 duration-200" 
+                        />
+                      </div>
                     ) : (
-                      <FileText className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <div className="w-full h-24 sm:h-28 bg-slate-950 flex flex-col items-center justify-center gap-1.5 p-3 text-center border-b border-slate-800/80">
+                        <FileText className="w-7 h-7 text-indigo-400" />
+                        <span className="text-[10px] text-slate-400 uppercase font-mono">{file.type.split('/')[1] || 'FILE'}</span>
+                      </div>
                     )}
-                    <div className="min-w-0 flex-1">
-                      <span className="text-xs font-medium text-slate-200 truncate block">{file.name}</span>
-                      <span className="text-[10px] text-slate-500 block font-mono">SHA: {file.hash.slice(0, 8)}...</span>
+
+                    {/* File Metadata Label */}
+                    <div className="p-2.5">
+                      <span className="text-xs font-semibold text-slate-200 truncate block" title={file.name}>
+                        {file.name}
+                      </span>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mt-0.5">
+                        <span>{(file.size / 1024).toFixed(0)} KB</span>
+                        <span>SHA: {file.hash.slice(0, 6)}</span>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -719,6 +786,45 @@ ${entry.content}`;
         onClose={() => setIsDiaryChatOpen(false)}
         onDiaryContentUpdated={(content) => handleSaveContent(content)}
       />
+
+      {/* Delete Attachment Confirmation Popup Modal */}
+      {fileToDelete && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-rose-950/80 border border-rose-800 flex items-center justify-center text-rose-400 mx-auto shadow-lg shadow-rose-950/50">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="font-bold text-base text-white">Delete Attachment?</h3>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Are you sure you want to delete <span className="text-slate-200 font-semibold truncate block">"{fileToDelete.name}"</span>?
+              </p>
+              <p className="text-[11px] text-rose-400/90 leading-relaxed">
+                This will remove the file from your diary and permanently purge it from your Google Drive storage vault.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setFileToDelete(null)}
+                className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteAttachment}
+                className="flex-1 py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition shadow-md shadow-rose-600/30 flex items-center justify-center gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Delete from Drive</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

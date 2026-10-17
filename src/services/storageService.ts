@@ -274,6 +274,27 @@ export class StorageService {
     return { attachment, isDuplicate };
   }
 
+  static deleteDiaryAttachment(targetDate: string, fileId: string): boolean {
+    const entry = this.getDiaryForDate(targetDate);
+    const toDelete = entry.attachments.find(a => a.id === fileId);
+    if (!toDelete) return false;
+
+    entry.attachments = entry.attachments.filter(a => a.id !== fileId);
+    entry.updatedAt = new Date().toISOString();
+    this.saveDiaryForDate(entry);
+
+    // Update file registry to remove reference or remove completely if no longer used
+    const registry = this.getFileRegistry();
+    if (registry[toDelete.hash]) {
+      registry[toDelete.hash].datesUsed = (registry[toDelete.hash].datesUsed || []).filter(d => d !== targetDate);
+      if (registry[toDelete.hash].datesUsed.length === 0) {
+        delete registry[toDelete.hash];
+      }
+      this.saveFileRegistry(registry);
+    }
+    return true;
+  }
+
   // --- GOOGLE DRIVE INTEGRATION STATE ---
   static getGoogleDriveState(): GoogleDriveState {
     try {

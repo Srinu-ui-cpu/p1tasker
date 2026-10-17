@@ -56,6 +56,30 @@ export class AIBrokerService {
 
   static saveConfig(config: AIState): void {
     localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(config));
+    // Proactively persist updated configuration and API keys to cloud vault
+    try {
+      import('./googleAuthService').then(({ GoogleAuthService }) => {
+        if (GoogleAuthService.isAuthenticated()) {
+          GoogleAuthService.triggerDriveSync().catch(() => {});
+        }
+      });
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * Completely purges all stored AI API keys locally and from Google Drive vault
+   */
+  static purgeAllApiKeys(): void {
+    const config = this.getConfig();
+    config.apiKeys = {
+      gemini: '',
+      groq: '',
+      openai: '',
+    };
+    config.customConfig.apiKey = '';
+    this.saveConfig(config);
   }
 
   // --- DYNAMIC LIVE MODEL DISCOVERY (NO HARDCODING) ---
