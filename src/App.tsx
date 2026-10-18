@@ -11,6 +11,7 @@ import { GlobalChatbotDrawer } from './components/GlobalChatbotDrawer';
 import { SettingsModal } from './components/SettingsModal';
 import { AlarmAlertModal } from './components/AlarmAlertModal';
 import { GoogleLoginPage } from './components/GoogleLoginPage';
+import { LandingPage } from './components/LandingPage';
 import { BackupRestoreView } from './components/BackupRestoreView';
 import { StorageService } from './services/storageService';
 import { GoogleAuthService } from './services/googleAuthService';
@@ -34,6 +35,12 @@ export function App() {
   }
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => GoogleAuthService.isAuthenticated());
+  const [showAuthPage, setShowAuthPage] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.location.hash === '#login' || window.location.search.includes('login=true');
+    }
+    return false;
+  });
   const [currentDate, setCurrentDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   // Calendar appears first after Google authentication
   const [activeTab, setActiveTab] = useState<'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup'>('calendar');
@@ -79,12 +86,23 @@ export function App() {
     setActiveTab(tab as 'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup');
   };
 
-  // If user is not authenticated with Google, show the Google Sign-In page
+  // If user is not authenticated with Google, show Landing Page or Clean Login Page
   if (!isAuthenticated) {
+    if (!showAuthPage) {
+      return (
+        <LandingPage
+          onGetStarted={() => setShowAuthPage(true)}
+          onSignIn={() => setShowAuthPage(true)}
+        />
+      );
+    }
+
     return (
       <GoogleLoginPage
+        onBack={() => setShowAuthPage(false)}
         onLoginSuccess={() => {
           setIsAuthenticated(true);
+          setShowAuthPage(false);
           setActiveTab('calendar');
           refreshTasks();
         }}
@@ -108,6 +126,7 @@ export function App() {
           await FirebaseAuthService.signOut();
           GoogleAuthService.signOut();
           setIsAuthenticated(false);
+          setShowAuthPage(false);
         }}
         isChatOpen={isChatOpen}
         driveState={driveState}

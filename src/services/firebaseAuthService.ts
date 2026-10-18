@@ -21,14 +21,14 @@ export interface FirebaseConfig {
 
 const FIREBASE_CONFIG_KEY = 'tasker_firebase_config_v1';
 
-// Default / fallback Firebase config template
+// User-provided Firebase configuration for p1tasker
 const DEFAULT_FIREBASE_CONFIG: FirebaseConfig = {
-  apiKey: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_API_KEY || '',
-  authDomain: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_AUTH_DOMAIN || '',
-  projectId: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_PROJECT_ID || '',
-  storageBucket: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_STORAGE_BUCKET || '',
-  messagingSenderId: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
-  appId: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_APP_ID || '',
+  apiKey: "AIzaSyB2F-9F-pB3r32VLa4twyfNBCRtbctEH1M",
+  authDomain: "p1tasker.firebaseapp.com",
+  projectId: "p1tasker",
+  storageBucket: "p1tasker.firebasestorage.app",
+  messagingSenderId: "616794995226",
+  appId: "1:616794995226:web:6f63b1a4b05dc2dcbdefa3"
 };
 
 export class FirebaseAuthService {
@@ -43,7 +43,7 @@ export class FirebaseAuthService {
       const stored = localStorage.getItem(FIREBASE_CONFIG_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed && parsed.apiKey) {
+        if (parsed && parsed.apiKey?.trim() && parsed.projectId?.trim()) {
           return { ...DEFAULT_FIREBASE_CONFIG, ...parsed };
         }
       }
