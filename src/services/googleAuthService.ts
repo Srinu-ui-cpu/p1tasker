@@ -344,7 +344,7 @@ export class GoogleAuthService {
    */
   static getDriveFolderUrl(): string {
     const state = this.getDriveState();
-    if (state.folderId && state.folderId !== 'tasker-app-data-vault') {
+    if (state.folderId && state.folderId !== 'tasker-app-data-vault' && /^[a-zA-Z0-9_-]{15,}$/.test(state.folderId)) {
       return `https://drive.google.com/drive/folders/${state.folderId}`;
     }
     return `https://drive.google.com/drive/search?q=Tasker`;

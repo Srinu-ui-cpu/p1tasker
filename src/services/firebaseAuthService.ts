@@ -138,18 +138,8 @@ export class FirebaseAuthService {
       prompt: 'select_account',
     });
 
-    // Add timeout protection so the UI never gets stuck rotating
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => {
-        reject(new Error('Sign-in popup timed out or was blocked by your browser. Please check if popups or third-party cookies are allowed, or sign in directly using your Google email below.'));
-      }, 20000);
-    });
-
     try {
-      const result = await Promise.race([
-        signInWithPopup(auth, provider),
-        timeoutPromise
-      ]);
+      const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
       // Extract OAuth credential containing Google Drive access token

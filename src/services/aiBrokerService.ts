@@ -34,9 +34,18 @@ export class AIBrokerService {
       const data = localStorage.getItem(AI_STORAGE_KEY);
       if (!data) return this.defaultState;
       const parsed = JSON.parse(data);
+      const validProviders: AIProvider[] = ['gemini', 'groq', 'openai', 'custom'];
+      let activeProvider: AIProvider = parsed.activeProvider;
+      if (!validProviders.includes(activeProvider) || (activeProvider as string) === 'local') {
+        activeProvider = 'gemini';
+        parsed.activeProvider = 'gemini';
+        localStorage.setItem(AI_STORAGE_KEY, JSON.stringify(parsed));
+      }
+
       return {
         ...this.defaultState,
         ...parsed,
+        activeProvider,
         apiKeys: { ...this.defaultState.apiKeys, ...(parsed.apiKeys || {}) },
         selectedModels: { ...this.defaultState.selectedModels, ...(parsed.selectedModels || {}) },
         discoveredModels: { ...this.defaultState.discoveredModels, ...(parsed.discoveredModels || {}) },

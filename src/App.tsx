@@ -22,6 +22,7 @@ import { TaskItem, GoogleDriveState, AIProvider } from './types';
 
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { TermsOfServiceView } from './components/TermsOfServiceView';
+import { AttachGoogleModal } from './components/AttachGoogleModal';
 
 export function App() {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -51,11 +52,24 @@ export function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isDiaryOpen, setIsDiaryOpen] = useState(false);
+  const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
+  const [dismissedWarningBanner, setDismissedWarningBanner] = useState(false);
   const [activeAlarm, setActiveAlarm] = useState<ActiveAlarmTrigger | null>(null);
 
   // States
   const [driveState, setDriveState] = useState<GoogleDriveState>(() => GoogleAuthService.getDriveState());
   const [activeAIProvider, setActiveAIProvider] = useState<AIProvider>(() => AIBrokerService.getConfig().activeProvider);
+
+  // Auto-prompt email-only users to attach Google account
+  useEffect(() => {
+    if (isAuthenticated && !driveState.accessToken) {
+      const seen = sessionStorage.getItem('tasker_seen_attach_prompt');
+      if (!seen) {
+        sessionStorage.setItem('tasker_seen_attach_prompt', 'true');
+        setIsAttachModalOpen(true);
+      }
+    }
+  }, [isAuthenticated, driveState.accessToken]);
 
   // Refresh tasks whenever date changes or tasks are updated
   const refreshTasks = () => {
@@ -131,7 +145,35 @@ export function App() {
         isChatOpen={isChatOpen}
         driveState={driveState}
         activeAIProvider={activeAIProvider}
+        onOpenAttachGoogle={() => setIsAttachModalOpen(true)}
       />
+
+      {/* Temporary Browser Storage Warning Banner for Email-only Users */}
+      {isAuthenticated && !driveState.accessToken && !dismissedWarningBanner && (
+        <div className="bg-gradient-to-r from-amber-950 via-amber-900 to-amber-950 border-b border-amber-600/80 px-4 py-2.5 text-xs text-amber-200 flex items-center justify-between gap-3 shadow-md z-30">
+          <div className="flex items-center gap-2.5 flex-1 min-w-0">
+            <span className="p-1 rounded-md bg-amber-500 text-slate-950 font-bold shrink-0">⚠️</span>
+            <span className="truncate sm:overflow-visible">
+              <strong>Temporary Browser Storage:</strong> Data is currently stored locally in your browser and may be lost if site data is cleared. Please attach a Google Account to enable automatic Google Drive cloud backup & unlock full features!
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setIsAttachModalOpen(true)}
+              className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-900 font-bold rounded-lg text-xs transition shadow-sm flex items-center gap-1.5"
+            >
+              <span>Connect Google Account</span>
+            </button>
+            <button
+              onClick={() => setDismissedWarningBanner(true)}
+              className="p-1 text-amber-400 hover:text-white rounded transition"
+              title="Dismiss notice"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Main View Area: Calendar First, Date Workspace on Click, Full Diary View */}
       <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
@@ -230,6 +272,14 @@ export function App() {
             }
           }, 5 * 60 * 1000);
         }}
+      />
+
+      {/* ATTACH GOOGLE ACCOUNT MODAL FOR EMAIL-ONLY USERS */}
+      <AttachGoogleModal
+        isOpen={isAttachModalOpen}
+        onClose={() => setIsAttachModalOpen(false)}
+        onConnected={refreshTasks}
+        userEmail={driveState.userEmail}
       />
 
     </div>

@@ -561,27 +561,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Google Drive Direct Folder Guidance */}
-                <div className="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/60 text-xs text-indigo-200 space-y-1">
+                <div className={`p-3.5 rounded-xl border text-xs space-y-1.5 ${
+                  driveState.accessToken 
+                    ? 'bg-indigo-950/40 border-indigo-800/60 text-indigo-200' 
+                    : 'bg-amber-950/40 border-amber-800/60 text-amber-200'
+                }`}>
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-white flex items-center gap-1.5">
+                    <span className="font-semibold flex items-center gap-1.5 text-white">
                       <FolderSync className="w-3.5 h-3.5 text-indigo-400" />
-                      <span>Google Drive Folder Location</span>
+                      <span>{driveState.accessToken ? 'Google Drive Folder Location' : 'Browser Storage Mode (Drive Not Yet Connected)'}</span>
                     </span>
                     <a
                       href={GoogleAuthService.getDriveFolderUrl()}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] flex items-center gap-1 transition shadow-sm"
+                      className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] flex items-center gap-1 transition shadow-sm"
                     >
-                      <span>Open in Drive</span>
+                      <span>{driveState.accessToken ? 'Open in Drive' : 'Search Drive'}</span>
                       <ExternalLink className="w-2.5 h-2.5" />
                     </a>
                   </div>
                   <p className="text-[11px] text-slate-300">
-                    Your vault is stored in the <strong>Tasker App Data</strong> folder at the root of your Google Drive ({driveState.activeStorageAccountEmail || driveState.userEmail || 'Active Account'}).
-                  </p>
-                  <p className="text-[10px] text-slate-400">
-                    💡 <em>Note: If you have multiple Google accounts logged in, ensure your Google Drive tab is viewing the account matching your Tasker login.</em>
+                    {driveState.accessToken ? (
+                      <>Your vault is stored in the <strong>Tasker App Data</strong> folder in your Google Drive ({driveState.activeStorageAccountEmail || driveState.userEmail || 'Active Account'}).</>
+                    ) : (
+                      <>⚠️ <strong>Local Browser Storage:</strong> You are currently signed in via email without Google OAuth permissions. Data is stored in your local browser. Connect a Google account to create the permanent <strong>Tasker App Data</strong> folder in your Drive!</>
+                    )}
                   </p>
                 </div>
               </div>

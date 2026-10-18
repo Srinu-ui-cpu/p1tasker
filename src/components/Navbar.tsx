@@ -27,6 +27,7 @@ interface NavbarProps {
   onOpenSettings: () => void;
   onToggleChat: () => void;
   onSignOut?: () => void;
+  onOpenAttachGoogle?: () => void;
   isChatOpen: boolean;
   driveState: GoogleDriveState;
   activeAIProvider: AIProvider;
@@ -41,6 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenSettings,
   onToggleChat,
   onSignOut,
+  onOpenAttachGoogle,
   isChatOpen,
   driveState,
   activeAIProvider,
@@ -200,14 +202,25 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {driveState.userName || driveState.userEmail?.split('@')[0] || 'User'}
                 </span>
                 <span className="text-[9px] text-slate-400 truncate font-mono mt-0.5">
-                  {driveState.activeStorageAccountEmail || driveState.userEmail || 'Google Drive'}
+                  {driveState.accessToken ? '📁 Google Drive Synced' : '⚠️ Local Storage Only'}
                 </span>
               </div>
               <span 
-                className={`w-2 h-2 rounded-full shrink-0 ${driveState.isConnected ? 'bg-emerald-400 ring-2 ring-emerald-400/30' : 'bg-slate-500'}`} 
-                title={driveState.isConnected ? 'Google Drive Connected' : 'Local Storage'}
+                className={`w-2 h-2 rounded-full shrink-0 ${driveState.accessToken ? 'bg-emerald-400 ring-2 ring-emerald-400/30' : 'bg-amber-400 ring-2 ring-amber-400/30'}`} 
+                title={driveState.accessToken ? 'Google Drive Connected' : 'Browser Storage Only (Unsynced)'}
               />
             </button>
+
+            {/* Attach Google Account CTA if not yet connected to Drive */}
+            {!driveState.accessToken && onOpenAttachGoogle && (
+              <button
+                onClick={onOpenAttachGoogle}
+                className="px-2 py-1 rounded-lg bg-amber-950/80 hover:bg-amber-900 border border-amber-600/80 text-amber-300 text-[10px] font-bold flex items-center gap-1 transition shadow-sm animate-pulse"
+                title="Browser storage is temporary. Click to attach Google Account!"
+              >
+                <span>Connect Drive</span>
+              </button>
+            )}
 
             {/* Explicit Sign Out Button */}
             {onSignOut && (
@@ -234,8 +247,8 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <Sparkles className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
             <span className="hidden sm:inline">AI Brain</span>
-            <span className="px-1 text-[9px] uppercase bg-purple-900/80 rounded text-purple-200 border border-purple-700/60">
-              {activeAIProvider}
+            <span className="px-1.5 py-0.5 text-[9px] uppercase bg-purple-900/90 rounded text-purple-200 border border-purple-700/60 font-semibold font-mono tracking-wider">
+              {activeAIProvider === 'custom' ? 'Grok' : activeAIProvider === 'groq' ? 'Groq' : activeAIProvider === 'openai' ? 'ChatGPT' : 'Gemini'}
             </span>
           </button>
 

@@ -66,17 +66,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onSignIn
             <a href="#comparison" className="hover:text-white transition">Why Tasker</a>
           </nav>
 
-          {/* Action CTAs */}
+          {/* Action CTA */}
           <div className="flex items-center gap-3">
             <button
-              onClick={onSignIn}
-              className="px-4 py-2 text-xs sm:text-sm font-semibold text-slate-200 hover:text-white hover:bg-slate-900 rounded-xl transition"
-            >
-              Sign In
-            </button>
-            <button
               onClick={onGetStarted}
-              className="px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center gap-1.5"
+              className="px-5 py-2.5 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center gap-1.5"
             >
               <span>Get Started</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -110,21 +104,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onSignIn
           your personal Google Drive — <strong>never stored on third-party servers</strong>.
         </p>
 
-        {/* Primary CTA Buttons */}
-        <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-md">
+        {/* Single Primary CTA Button */}
+        <div className="mt-9 flex items-center justify-center w-full max-w-xs">
           <button
             onClick={onGetStarted}
-            className="w-full sm:w-auto flex-1 py-4 px-8 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.98] text-white font-extrabold text-base rounded-2xl shadow-xl shadow-indigo-500/30 hover:shadow-indigo-500/50 border border-indigo-400/30 flex items-center justify-center gap-3 transition group"
+            className="w-full py-4 px-8 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.98] text-white font-extrabold text-base rounded-2xl shadow-xl shadow-indigo-500/30 hover:shadow-indigo-500/50 border border-indigo-400/30 flex items-center justify-center gap-3 transition group"
           >
-            <span>Launch Tasker OS</span>
+            <span>Get Started</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </button>
-
-          <button
-            onClick={onSignIn}
-            className="w-full sm:w-auto py-4 px-6 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white text-sm font-semibold rounded-2xl border border-slate-800 transition flex items-center justify-center gap-2"
-          >
-            <span>Sign In to Vault</span>
           </button>
         </div>
 
