@@ -440,8 +440,34 @@ export const DiaryAIChatModal: React.FC<DiaryAIChatModalProps> = ({
                     )}
 
                     <div className="whitespace-pre-wrap">{msg.content}</div>
-                    <div className={`text-[10px] mt-1.5 opacity-60 ${isUser ? 'text-right text-indigo-200' : 'text-left text-slate-400'}`}>
-                      {format(new Date(msg.timestamp), 'hh:mm a')}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
+                      <div className={`text-[10px] opacity-60 ${isUser ? 'text-right text-indigo-200' : 'text-left text-slate-400'}`}>
+                        {format(new Date(msg.timestamp), 'hh:mm a')}
+                      </div>
+                      {!isUser && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const separator = diary.content.trim() ? '\n\n' : '';
+                            const newContent = `${diary.content}${separator}${msg.content}`;
+                            const updatedDiary: DiaryEntry = {
+                              ...diary,
+                              content: newContent,
+                              updatedAt: new Date().toISOString(),
+                            };
+                            setDiary(updatedDiary);
+                            StorageService.saveDiaryForDate(updatedDiary);
+                            if (onDiaryContentUpdated) onDiaryContentUpdated(newContent);
+                            setNotice('✔ Pasted into diary!');
+                            setTimeout(() => setNotice(null), 3000);
+                          }}
+                          className="px-2 py-0.5 rounded-md bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 text-indigo-300 hover:text-white text-[10px] font-semibold flex items-center gap-1 transition shadow-sm cursor-pointer"
+                          title="Paste this response directly into your diary"
+                        >
+                          <ArrowDownLeft className="w-3 h-3" />
+                          <span>Paste into Diary</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 

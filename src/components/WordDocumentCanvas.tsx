@@ -198,22 +198,15 @@ export const WordDocumentCanvas: React.FC<WordDocumentCanvasProps> = ({
         {/* Document Body Flow */}
         <div className="space-y-5 min-h-[220px]">
           {blocks.length === 0 ? (
-            <div className="py-12 text-center space-y-3 border-2 border-dashed border-slate-800 rounded-2xl p-6">
-              <FileText className="w-10 h-10 text-slate-600 mx-auto" />
-              <div>
-                <p className="text-sm font-semibold text-slate-300">Your journal document is empty</p>
-                <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                  Type your first paragraph, insert photos or files from Google Drive, and build a rich multi-paragraph document!
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => inlineFileInputRef.current?.click()}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-md"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add First Attachment</span>
-              </button>
+            <div className="py-2">
+              <textarea
+                value={content}
+                onChange={(e) => onContentChange(e.target.value)}
+                placeholder="Start typing your daily reflections, meetings, or thoughts here... (Tip: Click '+ Attach File' above to insert images and documents inline)"
+                rows={12}
+                className="w-full bg-transparent text-slate-100 text-sm sm:text-base leading-relaxed focus:outline-none resize-y font-sans placeholder-slate-500"
+                autoFocus
+              />
             </div>
           ) : (
             blocks.map((block, index) => {
@@ -288,65 +281,60 @@ export const WordDocumentCanvas: React.FC<WordDocumentCanvasProps> = ({
               return (
                 <div 
                   key={`att-${block.id}-${index}`} 
-                  className="my-3 rounded-2xl border border-slate-700/80 bg-slate-950/70 shadow-lg overflow-hidden group hover:border-indigo-600/70 transition"
+                  className="my-3 max-w-sm rounded-2xl border border-slate-700/80 bg-slate-950/80 shadow-md overflow-hidden group hover:border-indigo-500/80 transition"
                 >
                   {att ? (
                     isImage && att.dataUrl ? (
-                      /* Inline Image Presentation */
+                      /* Compact Inline Image Presentation */
                       <div className="relative">
                         <div 
                           onClick={() => onOpenViewer(att)}
-                          className="w-full max-h-96 bg-slate-950 flex items-center justify-center overflow-hidden cursor-pointer group-hover:brightness-105 transition"
-                          title="Click to view in popup with Google Drive sync"
+                          className="w-full h-40 sm:h-48 bg-slate-950 flex items-center justify-center overflow-hidden cursor-pointer relative group/img transition"
+                          title="Click to view/read in popup modal"
                         >
                           <img 
                             src={att.dataUrl} 
                             alt={att.name} 
-                            className="max-h-96 w-auto max-w-full object-contain rounded-t-xl"
+                            className="w-full h-full object-cover transition-transform duration-200 group-hover/img:scale-105" 
                           />
+                          <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition gap-1.5 text-xs text-white font-semibold backdrop-blur-[2px]">
+                            <Maximize2 className="w-4 h-4 text-indigo-400" />
+                            <span>Click to View in Popup</span>
+                          </div>
                         </div>
 
-                        {/* Image Footer Info & Drive Action Bar */}
-                        <div className="p-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between flex-wrap gap-2">
+                        {/* Compact Image Caption & Actions */}
+                        <div className="p-2.5 bg-slate-900 border-t border-slate-800 flex items-center justify-between gap-2">
                           <div 
                             onClick={() => onOpenViewer(att)}
-                            className="flex items-center gap-2 cursor-pointer min-w-0"
+                            className="flex items-center gap-1.5 cursor-pointer min-w-0"
+                            title={att.name}
                           >
-                            <ImageIcon className="w-4 h-4 text-indigo-400 shrink-0" />
-                            <span className="text-xs font-semibold text-white truncate max-w-xs" title={att.name}>
+                            <ImageIcon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                            <span className="text-xs font-semibold text-slate-200 truncate max-w-[150px]">
                               {att.name}
                             </span>
                             <span className="text-[10px] text-slate-400 font-mono">
-                              ({(att.size / 1024).toFixed(0)} KB)
+                              ({(att.size / 1024).toFixed(0)}KB)
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => onOpenViewer(att)}
-                              className="px-3 py-1 rounded-xl bg-indigo-600/90 hover:bg-indigo-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
-                              title="Open image preview and View in Google Drive"
+                              className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] flex items-center gap-1 transition shadow-sm"
+                              title="Click to open popup preview & View in Google Drive"
                             >
-                              <Cloud className="w-3.5 h-3.5" />
-                              <span>View in Drive</span>
+                              <span>View</span>
                               <Maximize2 className="w-3 h-3" />
                             </button>
 
                             <button
                               type="button"
-                              onClick={() => handleRemoveAttachmentFromText(block.id)}
-                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-                              title="Unlink from this spot in the document"
-                            >
-                              <span className="text-[10px] font-mono px-1">Unlink</span>
-                            </button>
-
-                            <button
-                              type="button"
                               onClick={() => onDeleteAttachment(att)}
-                              className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 transition"
-                              title="Permanently delete file from diary & Drive vault"
+                              className="p-1 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 transition"
+                              title="Permanently delete this file from diary and Google Drive"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -355,57 +343,45 @@ export const WordDocumentCanvas: React.FC<WordDocumentCanvasProps> = ({
                       </div>
                     ) : (
                       /* Inline File / Document Presentation */
-                      <div className="p-4 bg-slate-900 flex items-center justify-between flex-wrap gap-3">
+                      <div className="p-3 bg-slate-900 flex items-center justify-between gap-2.5">
                         <div 
                           onClick={() => onOpenViewer(att)}
-                          className="flex items-center gap-3 cursor-pointer min-w-0"
-                          title="Click to view file details and open in Google Drive"
+                          className="flex items-center gap-2 cursor-pointer min-w-0"
+                          title="Click to view file in popup modal"
                         >
-                          <div className="p-2.5 rounded-xl bg-indigo-950 text-indigo-400 border border-indigo-800/80 shrink-0">
-                            <FileText className="w-5 h-5" />
+                          <div className="p-2 rounded-xl bg-indigo-950 text-indigo-400 border border-indigo-800/80 shrink-0">
+                            <FileText className="w-4 h-4" />
                           </div>
                           <div className="min-w-0">
-                            <span className="text-xs sm:text-sm font-bold text-white truncate block" title={att.name}>
+                            <span className="text-xs font-bold text-white truncate block max-w-[170px]" title={att.name}>
                               {att.name}
                             </span>
-                            <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
-                              <span>{(att.size / 1024).toFixed(0)} KB</span>
+                            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5">
+                              <span>{(att.size / 1024).toFixed(0)}KB</span>
                               <span>&bull;</span>
-                              <span className="uppercase">{att.type.split('/')[1] || 'FILE'}</span>
-                              <span>&bull;</span>
-                              <span className="text-emerald-400 font-semibold flex items-center gap-1">
-                                <Cloud className="w-3 h-3" /> Drive Synced
+                              <span className="text-emerald-400 font-semibold flex items-center gap-0.5">
+                                <Cloud className="w-2.5 h-2.5" /> Drive
                               </span>
                             </div>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1">
                           <button
                             type="button"
                             onClick={() => onOpenViewer(att)}
-                            className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
-                            title="Open file preview and view in Google Drive"
+                            className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm transition"
+                            title="Click to view/read in popup modal"
                           >
-                            <Cloud className="w-3.5 h-3.5" />
-                            <span>View in Drive</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveAttachmentFromText(block.id)}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
-                            title="Unlink from this spot in the document"
-                          >
-                            <span className="text-[10px] font-mono px-1">Unlink</span>
+                            <span>Read</span>
+                            <Maximize2 className="w-3 h-3" />
                           </button>
 
                           <button
                             type="button"
                             onClick={() => onDeleteAttachment(att)}
-                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 transition"
-                            title="Permanently delete file from diary & Drive vault"
+                            className="p-1 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 transition"
+                            title="Permanently delete this file from diary and Google Drive"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -430,6 +406,31 @@ export const WordDocumentCanvas: React.FC<WordDocumentCanvasProps> = ({
                 </div>
               );
             })
+          )}
+
+          {/* Direct Continuation Typing Area */}
+          {blocks.length > 0 && (
+            <div className="pt-4 border-t border-slate-800/60 mt-4">
+              <textarea
+                placeholder="Continue writing below... (Press Enter to append paragraph)"
+                rows={3}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    const target = e.target as HTMLTextAreaElement;
+                    if (target.value.trim()) {
+                      e.preventDefault();
+                      const separator = content.trim() ? '\n\n' : '';
+                      onContentChange(`${content}${separator}${target.value.trim()}`);
+                      target.value = '';
+                    }
+                  }
+                }}
+                className="w-full bg-slate-950/60 hover:bg-slate-950 focus:bg-slate-950 rounded-2xl p-3 border border-slate-800 focus:border-indigo-600 text-slate-100 text-sm leading-relaxed focus:outline-none resize-y font-sans placeholder-slate-500 transition shadow-inner"
+              />
+              <span className="text-[10px] text-slate-500 mt-1 block px-1">
+                Tip: Press Enter to append paragraph, or Shift+Enter for new line.
+              </span>
+            </div>
           )}
         </div>
 

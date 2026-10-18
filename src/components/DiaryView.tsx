@@ -1,40 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { format, parseISO, addDays, subDays } from 'date-fns';
 import { 
-  BookOpen, 
+  FileText, 
+  FileUp, 
+  Sparkles, 
   Mic, 
   MicOff, 
   Volume2, 
   VolumeX, 
-  Sparkles, 
-  Upload, 
+  Paperclip, 
+  ChevronLeft, 
+  ChevronRight, 
+  Calendar as CalendarIcon, 
+  Trash2, 
+  Cloud, 
+  Plus, 
+  Bot, 
   Check, 
-  X, 
-  FileText, 
-  Image as ImageIcon, 
-  Languages, 
-  Smile, 
-  CheckSquare,
-  Bot,
-  ChevronLeft,
-  ChevronRight,
-  RotateCcw,
-  Calendar as CalendarIcon,
-  Trash2,
-  AlertTriangle,
-  FileUp,
-  LayoutTemplate,
-  Cloud,
+  X,
+  ExternalLink,
   Eye,
-  Plus
+  Maximize2,
+  FolderOpen,
+  Image as ImageIcon,
+  CheckCircle2
 } from 'lucide-react';
-import { DiaryEntry, Mood, FileAttachment } from '../types';
+import { DiaryEntry, FileAttachment } from '../types';
 import { StorageService } from '../services/storageService';
 import { SpeechService } from '../services/speechService';
 import { AIBrokerService } from '../services/aiBrokerService';
 import { GoogleAuthService } from '../services/googleAuthService';
 import { DiaryAIChatModal } from './DiaryAIChatModal';
-import { DiaryAIModelSelector } from './DiaryAIModelSelector';
 import { DriveMediaViewerModal } from './DriveMediaViewerModal';
 import { WordDocumentCanvas, parseDocumentContent } from './WordDocumentCanvas';
 
@@ -54,54 +50,30 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiNotification, setAiNotification] = useState<string | null>(null);
+  
+  // File inputs
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Word Document View vs Full Textarea Editor Mode
-  const [activeTab, setActiveTab] = useState<'canvas' | 'editor'>('canvas');
+  const attachmentsSectionRef = useRef<HTMLDivElement>(null);
 
   // Popup Preview Modal for Attached Files / Images (View in Drive)
   const [viewerAttachment, setViewerAttachment] = useState<FileAttachment | null>(null);
 
+  // Delete confirmation modal state
+  const [fileToDelete, setFileToDelete] = useState<FileAttachment | null>(null);
+
   // Diary AI Chat Companion Modal State
   const [isDiaryChatOpen, setIsDiaryChatOpen] = useState(false);
 
-  // Multilingual Dictation & AI Whisper State
+  // Multilingual Dictation State
   const [dictationLang, setDictationLang] = useState('te-IN'); // Default to Telugu / Multilingual
-  const [isAIRecording, setIsAIRecording] = useState(false);
-
-  // Selective Translate State
-  const [isTranslateOpen, setIsTranslateOpen] = useState(false);
-  const [selectedLanguage, setSelectedLanguage] = useState('Telugu');
-  const [translateTargetText, setTranslateTargetText] = useState('');
-  const [isSelectionOnly, setIsSelectionOnly] = useState(false);
-  const [selectionRange, setSelectionRange] = useState<{ start: number; end: number } | null>(null);
-  const [translatedResult, setTranslatedResult] = useState<string | null>(null);
-
-  // Undo state for Grammar Auto-correct
-  const [previousContentForUndo, setPreviousContentForUndo] = useState<string | null>(null);
-
-  const AVAILABLE_LANGUAGES = [
-    { code: 'te', name: 'Telugu', flag: '🇮🇳' },
-    { code: 'hi', name: 'Hindi', flag: '🇮🇳' },
-    { code: 'es', name: 'Spanish', flag: '🇪🇸' },
-    { code: 'fr', name: 'French', flag: '🇫🇷' },
-    { code: 'de', name: 'German', flag: '🇩🇪' },
-    { code: 'it', name: 'Italian', flag: '🇮🇹' },
-    { code: 'pt', name: 'Portuguese', flag: '🇵🇹' },
-    { code: 'ja', name: 'Japanese', flag: '🇯🇵' },
-    { code: 'zh', name: 'Chinese', flag: '🇨🇳' },
-    { code: 'ar', name: 'Arabic', flag: '🇸🇦' },
-    { code: 'ru', name: 'Russian', flag: '🇷🇺' },
-    { code: 'ko', name: 'Korean', flag: '🇰🇷' },
-    { code: 'nl', name: 'Dutch', flag: '🇳🇱' },
-  ];
+  const dictationBaseRef = useRef<string>('');
 
   const DICTATION_LANGUAGES = [
     { code: 'te-IN', label: 'Telugu (తెలుగు 🇮🇳)' },
     { code: 'hi-IN', label: 'Hindi (हिंदी 🇮🇳)' },
     { code: 'en-US', label: 'English (US)' },
+    { code: 'en-IN', label: 'English (India)' },
     { code: 'es-ES', label: 'Spanish' },
     { code: 'fr-FR', label: 'French' },
     { code: 'de-DE', label: 'German' },
@@ -130,29 +102,17 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
     onDateChange(format(new Date(), 'yyyy-MM-dd'));
   };
 
-  const handleSaveContent = (content: string) => {
+  const handleSaveContent = (newContent: string) => {
     const updated: DiaryEntry = {
       ...entry,
-      content,
+      content: newContent,
       updatedAt: new Date().toISOString(),
     };
     setEntry(updated);
     StorageService.saveDiaryForDate(updated);
   };
 
-  const handleSelectMood = (mood: Mood) => {
-    const updated: DiaryEntry = {
-      ...entry,
-      mood: entry.mood === mood ? undefined : mood,
-      updatedAt: new Date().toISOString(),
-    };
-    setEntry(updated);
-    StorageService.saveDiaryForDate(updated);
-  };
-
-  const dictationBaseRef = useRef<string>('');
-
-  // --- 🎙️ SPEECH DICTATION ---
+  // --- 🎙️ MULTILINGUAL VOICE DICTATION (WITH CONTINUOUS STUTTER DEDUPLICATION) ---
   const handleToggleDictation = () => {
     if (isDictating) {
       SpeechService.stopDictation();
@@ -162,7 +122,7 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
     } else {
       dictationBaseRef.current = entry.content;
       setIsDictating(true);
-      setAiNotification(`🎙️ Listening in ${dictationLang}... Speak into your microphone.`);
+      setAiNotification(`🎙️ Listening in ${dictationLang}... Speak naturally into your microphone.`);
 
       const started = SpeechService.startDictation(
         (transcript) => {
@@ -190,7 +150,7 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
     }
   };
 
-  // --- ✨ AI ERROR CORRECTION & MEANINGFUL SENTENCES ---
+  // --- ✨ AI ERROR CORRECTION & SENTENCE RECONSTRUCTION ENGINE ---
   const handleAiErrorCorrection = async () => {
     if (!entry.content.trim()) {
       setAiNotification('Document is empty. Write or dictate your thoughts first.');
@@ -199,7 +159,7 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
     }
 
     setAiLoading(true);
-    setAiNotification('✨ AI is removing voice stutter, correcting errors & crafting meaningful sentences...');
+    setAiNotification('✨ Analyzing diary, correcting errors, removing voice stutter & rewriting sentences...');
 
     try {
       const res = await AIBrokerService.correctAndPolishDiary(entry.content);
@@ -207,75 +167,21 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
       setAiNotification(`✨ ${res.summary}`);
     } catch (err: unknown) {
       const error = err as Error;
-      setAiNotification(`Error correction note: ${error.message || 'Updated with built-in engine'}`);
+      setAiNotification(`Error correction note: ${error.message || 'Fixed with built-in engine'}`);
     } finally {
       setAiLoading(false);
       setTimeout(() => setAiNotification(null), 5000);
     }
   };
 
-  // --- 🧠 AI WHISPER MULTILINGUAL RECORDING ---
-  const handleToggleAIRecording = async () => {
-    if (isAIRecording) {
-      setIsAIRecording(false);
-      setAiLoading(true);
-      setAiNotification('Processing audio with AI Whisper model in all languages...');
-
-      try {
-        const { transcript, modelUsed } = await SpeechService.stopAIRecordingAndTranscribe();
-
-        if (!transcript || !transcript.trim()) {
-          setAiNotification('No speech detected in audio recording.');
-          return;
-        }
-
-        const formatted = await SpeechService.formatVoiceIntoDiary(transcript, dictationLang);
-        const separator = entry.content.trim() ? '\n\n' : '';
-        const newContent = `${entry.content}${separator}${formatted.formattedDiary}`;
-
-        const updated: DiaryEntry = {
-          ...entry,
-          content: newContent,
-          mood: entry.mood || (formatted.mood as Mood) || undefined,
-          updatedAt: new Date().toISOString(),
-        };
-
-        setEntry(updated);
-        StorageService.saveDiaryForDate(updated);
-        setAiNotification(`✨ AI transcribed (${modelUsed}) and crafted your diary reflection!`);
-      } catch (err: unknown) {
-        const error = err as Error;
-        setAiNotification(`AI Voice note: ${error.message || 'Check microphone setup'}`);
-      } finally {
-        setAiLoading(false);
-        setTimeout(() => setAiNotification(null), 5000);
-      }
-    } else {
-      try {
-        const started = await SpeechService.startAIRecording();
-        if (started) {
-          setIsAIRecording(true);
-          setAiNotification('🎙️ Recording voice thoughts in any language... Click button again when finished speaking.');
-        } else {
-          setAiNotification('Could not access microphone. Please grant browser microphone permissions.');
-          setTimeout(() => setAiNotification(null), 4000);
-        }
-      } catch (err: unknown) {
-        const error = err as Error;
-        setAiNotification(`Could not start recording: ${error.message}`);
-        setTimeout(() => setAiNotification(null), 4000);
-      }
-    }
-  };
-
-  // --- 🔊 TEXT TO SPEECH ---
+  // --- 🔊 TEXT TO SPEECH (READ ALOUD) ---
   const handleToggleSpeak = () => {
     if (isSpeaking) {
       SpeechService.stopSpeaking();
       setIsSpeaking(false);
     } else {
       if (!entry.content.trim()) {
-        setAiNotification('Diary is empty. Write or dictate something to read aloud.');
+        setAiNotification('Nothing to read aloud yet. Type or dictate your entry first!');
         setTimeout(() => setAiNotification(null), 3000);
         return;
       }
@@ -284,164 +190,7 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
     }
   };
 
-  // --- ✨ AUTO CORRECT GRAMMAR ---
-  const handleAutoCorrectGrammar = async () => {
-    if (!entry.content.trim()) return;
-
-    let targetText = entry.content;
-    let isSelected = false;
-
-    if (textareaRef.current) {
-      const { selectionStart, selectionEnd } = textareaRef.current;
-      if (selectionStart !== selectionEnd) {
-        targetText = entry.content.substring(selectionStart, selectionEnd);
-        isSelected = true;
-      }
-    }
-
-    setAiLoading(true);
-    setAiNotification('Analyzing grammar, spelling & typos...');
-    setPreviousContentForUndo(entry.content);
-
-    try {
-      const result = await AIBrokerService.correctGrammar(targetText);
-
-      let newContent = entry.content;
-      if (isSelected && textareaRef.current) {
-        const { selectionStart, selectionEnd } = textareaRef.current;
-        newContent = entry.content.substring(0, selectionStart) + result.correctedText + entry.content.substring(selectionEnd);
-      } else {
-        newContent = result.correctedText;
-      }
-
-      handleSaveContent(newContent);
-      setAiNotification(`✔ Auto-corrected ${result.fixesApplied} item(s) using ${result.modelUsed}!`);
-    } catch {
-      setAiNotification('Could not complete grammar correction.');
-    } finally {
-      setAiLoading(false);
-      setTimeout(() => setAiNotification(null), 4000);
-    }
-  };
-
-  const handleUndoGrammar = () => {
-    if (previousContentForUndo !== null) {
-      handleSaveContent(previousContentForUndo);
-      setPreviousContentForUndo(null);
-      setAiNotification('Reverted back to previous text.');
-      setTimeout(() => setAiNotification(null), 3000);
-    }
-  };
-
-  // --- 🌐 SELECTIVE TRANSLATE ---
-  const handleOpenTranslate = () => {
-    let textToTranslate = entry.content;
-    let isSelection = false;
-
-    if (textareaRef.current) {
-      const { selectionStart, selectionEnd } = textareaRef.current;
-      if (selectionStart !== selectionEnd) {
-        textToTranslate = entry.content.substring(selectionStart, selectionEnd);
-        isSelection = true;
-        setSelectionRange({ start: selectionStart, end: selectionEnd });
-      } else {
-        setSelectionRange(null);
-      }
-    }
-
-    setTranslateTargetText(textToTranslate.trim());
-    setIsSelectionOnly(isSelection);
-    setTranslatedResult(null);
-    setIsTranslateOpen(true);
-  };
-
-  const handleExecuteTranslate = async (lang: string = selectedLanguage) => {
-    if (!translateTargetText.trim()) return;
-    setAiLoading(true);
-    setSelectedLanguage(lang);
-
-    try {
-      const res = await AIBrokerService.translateText(translateTargetText, lang);
-      setTranslatedResult(res.translatedText);
-
-      // Automatically append and format translation neatly at the bottom of the diary
-      const formattedBlock = `\n\n---\n### 🌐 Translation (${lang}):\n${res.translatedText}`;
-      const newContent = `${entry.content}${formattedBlock}`;
-      handleSaveContent(newContent);
-
-      setAiNotification(`✨ Translated to ${lang} and formatted neatly at the bottom of your diary!`);
-    } catch {
-      setAiNotification('Translation failed.');
-    } finally {
-      setAiLoading(false);
-      setTimeout(() => setAiNotification(null), 5000);
-    }
-  };
-
-  // --- 🤖 AI SUMMARIZE & EXTRACT ---
-  const handleAiSummarize = async () => {
-    if (!entry.content.trim()) return;
-    setAiLoading(true);
-    try {
-      const prompt = `Summarize this diary entry into 3 concise bullet points:\n\n${entry.content}`;
-      const res = await AIBrokerService.completeText(prompt);
-      const updated = { ...entry, aiSummary: res.text };
-      setEntry(updated);
-      StorageService.saveDiaryForDate(updated);
-      setAiNotification(`Summary generated using ${res.modelUsed}`);
-    } catch {
-      setAiNotification('Could not generate summary.');
-    } finally {
-      setAiLoading(false);
-      setTimeout(() => setAiNotification(null), 3000);
-    }
-  };
-
-  const handleAiExtractTasks = async () => {
-    if (!entry.content.trim()) return;
-    setAiLoading(true);
-    try {
-      const prompt = `Analyze this daily journal and extract actionable tasks that should be added to the to-do list.
-Return ONLY valid JSON format: [{"title": "task title", "priority": "high"|"medium"|"low"}]
-Diary content:
-${entry.content}`;
-
-      const res = await AIBrokerService.completeText(prompt);
-      let extracted: Array<{ title: string; priority: 'low' | 'medium' | 'high' }> = [];
-      try {
-        const jsonMatch = res.text.match(/\[[\s\S]*\]/);
-        if (jsonMatch) extracted = JSON.parse(jsonMatch[0]);
-      } catch {
-        extracted = [{ title: 'Follow up on diary action items', priority: 'medium' }];
-      }
-
-      extracted.forEach(item => {
-        StorageService.saveTask({
-          id: `task-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-          title: item.title,
-          date: currentDate,
-          priority: item.priority || 'medium',
-          status: 'todo',
-          tags: ['from-diary'],
-          subtasks: [],
-          alarmEnabled: false,
-          attachments: [],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      });
-
-      onTasksUpdated();
-      setAiNotification(`✨ Extracted and added ${extracted.length} tasks to your list!`);
-    } catch {
-      setAiNotification('Could not extract tasks.');
-    } finally {
-      setAiLoading(false);
-      setTimeout(() => setAiNotification(null), 4000);
-    }
-  };
-
-  // --- INLINE MEDIA INSERTION & ATTACHMENTS ---
+  // --- 📎 ATTACH FILE / INLINE MEDIA INSERTION ---
   const handleInsertMediaFile = async (file: File, insertAfterIndex?: number) => {
     try {
       const { attachment } = await StorageService.attachFileToDate(file, currentDate);
@@ -465,15 +214,6 @@ ${entry.content}`;
         } else {
           newContent = `${entry.content.trimEnd()}${marker}`;
         }
-      } else if (textareaRef.current) {
-        const { selectionStart, selectionEnd } = textareaRef.current;
-        if (selectionStart !== undefined && selectionStart >= 0) {
-          const before = entry.content.substring(0, selectionStart);
-          const after = entry.content.substring(selectionEnd || selectionStart);
-          newContent = `${before}${marker}${after}`;
-        } else {
-          newContent = entry.content ? `${entry.content.trimEnd()}${marker}` : marker.trim();
-        }
       } else {
         newContent = entry.content ? `${entry.content.trimEnd()}${marker}` : marker.trim();
       }
@@ -486,7 +226,7 @@ ${entry.content}`;
       };
       setEntry(updated);
       StorageService.saveDiaryForDate(updated);
-      setAiNotification(`✨ Inserted "${file.name}" inline into document!`);
+      setAiNotification(`✨ Attached "${file.name}" to diary!`);
       setTimeout(() => setAiNotification(null), 3500);
 
       // Proactively sync media file to Google Drive vault
@@ -495,7 +235,7 @@ ${entry.content}`;
       }
     } catch (err: unknown) {
       const error = err as Error;
-      setAiNotification(`Attachment note: ${error.message || 'Saved locally'}`);
+      setAiNotification(`Attachment error: ${error.message || 'Saved locally'}`);
       setTimeout(() => setAiNotification(null), 4000);
     }
   };
@@ -510,8 +250,7 @@ ${entry.content}`;
     }
   };
 
-  const [fileToDelete, setFileToDelete] = useState<FileAttachment | null>(null);
-
+  // --- 🗑️ DELETE ATTACHMENT FROM DIARY & GOOGLE DRIVE ---
   const handleConfirmDeleteAttachment = async () => {
     if (!fileToDelete) return;
     const toRemove = fileToDelete;
@@ -525,7 +264,8 @@ ${entry.content}`;
       .join('')
       .split(`{{file:${toRemove.id}}}`)
       .join('')
-      .replace(/\n{3,}/g, '\n\n');
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
 
     const updated: DiaryEntry = {
       ...StorageService.getDiaryForDate(currentDate),
@@ -539,515 +279,322 @@ ${entry.content}`;
       GoogleAuthService.triggerDriveSync().catch(() => {});
     }
 
-    setAiNotification(`✔ Deleted "${toRemove.name}" from diary & Google Drive vault!`);
-    setTimeout(() => setAiNotification(null), 3500);
+    setAiNotification(`Deleted "${toRemove.name}" from diary and Google Drive.`);
+    setTimeout(() => setAiNotification(null), 3000);
   };
 
-  return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-fade-in">
-      
-      {/* Top Header & Date Stepper */}
-      <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl backdrop-blur-md flex items-center justify-between flex-wrap gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-purple-950 border border-purple-800 flex items-center justify-center text-purple-400 shadow-lg shadow-purple-900/20">
-            <BookOpen className="w-6 h-6" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-extrabold text-white">Daily Journal & Diary</h1>
-              <span className="text-xs font-mono px-2.5 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800/80">
-                {format(parsedDate, 'MMMM d, yyyy')}
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Reflections, multilingual speech dictation, Telugu translation, and AI memory companion.
-            </p>
-          </div>
-        </div>
+  const scrollToAttachments = () => {
+    attachmentsSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
 
-        {/* Date Stepper & Companion Chat Launcher */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Quick Date Stepper */}
-          <div className="flex items-center bg-slate-800/90 rounded-xl p-1 border border-slate-700/60 shadow-inner">
+  const wordCount = entry.content.trim() ? entry.content.trim().split(/\s+/).length : 0;
+  const charCount = entry.content.length;
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-6">
+      
+      {/* Hidden Universal File Pickers */}
+      <input
+        type="file"
+        ref={imageInputRef}
+        onChange={handleFileChange}
+        accept="image/*"
+        className="hidden"
+      />
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        className="hidden"
+      />
+
+      {/* =========================================================================
+          WORD DOCUMENT BAR (CLEAN, POWERFUL, UNCLUTTERED TOP RIBBON)
+         ========================================================================= */}
+      <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-3 sm:p-4 shadow-xl flex items-center justify-between flex-wrap gap-3 sticky top-16 z-30 backdrop-blur-md bg-slate-900/95">
+        
+        {/* Left: Date Stepper & Metrics */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center bg-slate-800 rounded-xl p-1 border border-slate-700 shadow-inner">
             <button 
               onClick={handlePrevDay} 
               title="Previous Day"
-              className="p-1.5 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition"
+              className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
             <button 
               onClick={handleToday}
-              className="px-3 py-1 text-xs font-semibold text-slate-200 hover:text-white hover:bg-slate-700/60 rounded-lg transition flex items-center gap-1.5"
+              className="px-3 py-1 text-xs font-bold text-white hover:bg-slate-700 rounded-lg transition flex items-center gap-1.5"
+              title="Jump to Today"
             >
               <CalendarIcon className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{format(parsedDate, 'EEE, MMM d')}</span>
+              <span>{format(parsedDate, 'EEEE, MMM d, yyyy')}</span>
             </button>
             <button 
               onClick={handleNextDay} 
               title="Next Day"
-              className="p-1.5 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition"
+              className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
 
-          {/* AI Companion Chat Button */}
-          <button
-            onClick={() => setIsDiaryChatOpen(true)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold bg-purple-950 hover:bg-purple-900 text-purple-200 border border-purple-700/80 shadow-md shadow-purple-950/40 transition group"
-            title="Open persistent AI Diary Chat for this date"
-          >
-            <Bot className="w-4 h-4 text-purple-400 group-hover:animate-pulse" />
-            <span>AI Diary Companion</span>
-            {entry.chatHistory && entry.chatHistory.length > 0 && (
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* Mood Selector Card */}
-      <div className="bg-slate-900/70 border border-slate-800/80 rounded-2xl p-4 flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          <Smile className="w-4 h-4 text-amber-400" />
-          <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">How was your day?</span>
+          <div className="hidden sm:flex items-center gap-2 text-slate-400 text-xs font-mono">
+            <span>{wordCount} words</span>
+            <span>&bull;</span>
+            <span className="text-emerald-400 font-semibold flex items-center gap-1">
+              <Check className="w-3 h-3" /> Auto-saved
+            </span>
+          </div>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-          {(['great', 'good', 'neutral', 'challenging', 'stressful'] as Mood[]).map((mood) => {
-            const isSelected = entry.mood === mood;
-            const moodLabels: Record<Mood, { emoji: string; text: string; color: string }> = {
-              great: { emoji: '🤩', text: 'Great', color: 'bg-emerald-950 text-emerald-300 border-emerald-700' },
-              good: { emoji: '😊', text: 'Good', color: 'bg-indigo-950 text-indigo-300 border-indigo-700' },
-              neutral: { emoji: '😐', text: 'Neutral', color: 'bg-slate-800 text-slate-300 border-slate-600' },
-              challenging: { emoji: '🤔', text: 'Tough', color: 'bg-amber-950 text-amber-300 border-amber-700' },
-              stressful: { emoji: '😫', text: 'Stressful', color: 'bg-rose-950 text-rose-300 border-rose-700' },
-            };
-            const item = moodLabels[mood];
-            return (
-              <button
-                key={mood}
-                onClick={() => handleSelectMood(mood)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
-                  isSelected 
-                    ? `${item.color} shadow-md font-bold ring-1 ring-white/20` 
-                    : 'bg-slate-950/50 hover:bg-slate-800 text-slate-400 border-slate-800'
-                }`}
-              >
-                <span>{item.emoji}</span>
-                <span>{item.text}</span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 🧠 AI Model Selector & API Key Manager */}
-      <DiaryAIModelSelector onModelChanged={() => {}} />
-
-      {/* View Switcher: Word Document Canvas vs Full Editor */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center bg-slate-900 border border-slate-800 rounded-2xl p-1 shadow-md">
-          <button
-            type="button"
-            onClick={() => setActiveTab('canvas')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
-              activeTab === 'canvas'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <LayoutTemplate className="w-4 h-4" />
-            <span>Word Document Canvas</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('editor')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition ${
-              activeTab === 'editor'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <FileText className="w-4 h-4" />
-            <span>Full Editor & Markdown</span>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          {/* Specialized file pickers for quick insert at cursor */}
-          <input
-            type="file"
-            ref={imageInputRef}
-            onChange={handleFileChange}
-            accept="image/*"
-            className="hidden"
-          />
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={() => imageInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-slate-800 text-xs font-semibold transition shadow-sm cursor-pointer"
-            title="Upload and insert an image inline at your cursor position"
-          >
-            <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
-            <span>+ Insert Image</span>
-          </button>
-
+        {/* Right: Core Action Tools */}
+        <div className="flex items-center gap-2 flex-wrap">
+          
+          {/* 📎 + Attach File / Image Button */}
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-semibold transition shadow-sm cursor-pointer"
-            title="Upload and attach any file/document inline"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+            title="Attach an image or document inline at end or between paragraphs"
           >
-            <FileUp className="w-3.5 h-3.5 text-slate-400" />
+            <FileUp className="w-3.5 h-3.5" />
             <span>+ Attach File</span>
           </button>
 
+          {/* ✨ AI Error Correction & Sentence Formation Button */}
           <button
             type="button"
             disabled={aiLoading || !entry.content.trim()}
             onClick={handleAiErrorCorrection}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-950/70 hover:bg-purple-900 text-purple-300 border border-purple-800/80 text-xs font-semibold disabled:opacity-40 transition shadow-sm cursor-pointer"
-            title="AI Error Correction: Remove voice stutter duplicates, fix grammar & rewrite into meaningful sentences"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-950/80 hover:bg-purple-900 text-purple-200 border border-purple-800/80 text-xs font-bold disabled:opacity-40 transition shadow-sm cursor-pointer"
+            title="Analyze entire diary, fix errors, remove voice stutter & rewrite into meaningful sentences"
           >
             <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>✨ Fix Errors & Polish</span>
+            <span>✨ Fix Errors & Sentences</span>
           </button>
-        </div>
-      </div>
 
-      {/* Main Journal View Body */}
-      {activeTab === 'canvas' ? (
-        <WordDocumentCanvas
-          content={entry.content}
-          attachments={entry.attachments}
-          onContentChange={handleSaveContent}
-          onOpenViewer={(att) => setViewerAttachment(att)}
-          onDeleteAttachment={(att) => setFileToDelete(att)}
-          onInsertMedia={handleInsertMediaFile}
-          date={currentDate}
-        />
-      ) : (
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col">
-          {/* Editor Toolbar */}
-          <div className="p-3 sm:p-4 bg-slate-950/70 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs">
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Auto Correct Grammar */}
-              <button
-                disabled={aiLoading || !entry.content.trim()}
-                onClick={handleAutoCorrectGrammar}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold bg-emerald-950/70 hover:bg-emerald-900 text-emerald-300 border border-emerald-800/80 disabled:opacity-40 transition shadow-sm"
-                title="Auto-correct spelling, grammar, and typos"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Auto Correct Grammar</span>
-              </button>
-
-              {previousContentForUndo !== null && (
-                <button
-                  onClick={handleUndoGrammar}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition"
-                  title="Undo grammar correction"
-                >
-                  <RotateCcw className="w-3 h-3 text-amber-400" />
-                  <span>Undo</span>
-                </button>
-              )}
-
-              {/* Selective Translate */}
-              <button
-                disabled={aiLoading || !entry.content.trim()}
-                onClick={handleOpenTranslate}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold bg-indigo-950/70 hover:bg-indigo-900 text-indigo-200 border border-indigo-800/80 disabled:opacity-40 transition shadow-sm"
-                title="Translate selected text or entire diary into Telugu & multiple languages"
-              >
-                <Languages className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Translate (Telugu & 12+ Langs)</span>
-              </button>
-
-              {/* Summarize */}
-              <button
-                disabled={aiLoading || !entry.content.trim()}
-                onClick={handleAiSummarize}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold bg-purple-950/60 hover:bg-purple-900 text-purple-200 border border-purple-800/60 disabled:opacity-40 transition"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-                <span>Summarize</span>
-              </button>
-
-              {/* Extract Tasks */}
-              <button
-                disabled={aiLoading || !entry.content.trim()}
-                onClick={handleAiExtractTasks}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 disabled:opacity-40 transition"
-              >
-                <CheckSquare className="w-3.5 h-3.5 text-slate-400" />
-                <span>Extract Tasks</span>
-              </button>
-            </div>
-
-            {/* Character / Word Count & Auto-save status */}
-            <div className="flex items-center gap-3 text-slate-400 text-[11px] font-mono">
-              <span>{entry.content.length} chars</span>
-              <span>{entry.content.trim() ? entry.content.trim().split(/\s+/).length : 0} words</span>
-              <span className="text-emerald-400 flex items-center gap-1">
-                <Check className="w-3 h-3" /> Auto-saved
-              </span>
-            </div>
+          {/* 🎙️ Multilingual Voice-to-Text */}
+          <div className="flex items-center bg-slate-800 rounded-xl p-0.5 border border-slate-700">
+            <select
+              value={dictationLang}
+              onChange={(e) => setDictationLang(e.target.value)}
+              className="bg-transparent text-slate-300 text-[11px] px-2 py-1 focus:outline-none cursor-pointer"
+              title="Select spoken language for voice dictation"
+            >
+              {DICTATION_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code} className="bg-slate-900 text-white">
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleToggleDictation}
+              className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                isDictating 
+                  ? 'bg-rose-600 text-white animate-pulse' 
+                  : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+              }`}
+              title="Dictate in chosen language with auto stutter removal"
+            >
+              {isDictating ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3 text-indigo-400" />}
+              <span>{isDictating ? 'Listening...' : 'Dictate'}</span>
+            </button>
           </div>
 
-          {/* Notification Banner */}
-          {aiNotification && (
-            <div className="p-3 bg-indigo-950/80 border-b border-indigo-800/80 text-indigo-200 text-xs font-semibold flex items-center justify-between animate-fade-in">
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
-                <span>{aiNotification}</span>
-              </div>
-              <button onClick={() => setAiNotification(null)} className="text-indigo-400 hover:text-white">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {/* Translation Sub-Panel */}
-          {isTranslateOpen && (
-            <div className="p-4 bg-indigo-950/30 border-b border-indigo-900/60 space-y-3 animate-fade-in">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-bold text-indigo-300">
-                  <Languages className="w-4 h-4 text-indigo-400" />
-                  <span>Selective Translate {isSelectionOnly ? '(Highlighted Selection)' : '(Entire Entry)'}</span>
-                </div>
-                <button onClick={() => setIsTranslateOpen(false)} className="text-slate-400 hover:text-white">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-
-              {/* Language Picker */}
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                  Click any language to translate & auto-paste at bottom of diary:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {AVAILABLE_LANGUAGES.map((lang) => (
-                    <button
-                      key={lang.code}
-                      onClick={() => handleExecuteTranslate(lang.name)}
-                      disabled={aiLoading}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
-                        selectedLanguage === lang.name
-                          ? 'bg-indigo-600 text-white border-indigo-500 shadow-md font-bold'
-                          : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
-                      }`}
-                    >
-                      <span>{lang.flag}</span>
-                      <span>{lang.name}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {translatedResult && (
-                <div className="mt-2 p-3 bg-indigo-950/60 border border-indigo-800/80 rounded-xl space-y-1">
-                  <span className="text-[11px] font-bold text-indigo-300 block">
-                    ✔ Result in {selectedLanguage} (Neatly formatted at the bottom of your diary):
-                  </span>
-                  <p className="text-xs text-slate-200 whitespace-pre-wrap font-sans bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
-                    {translatedResult}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Textarea Area */}
-          <div className="p-5 flex-1 min-h-[350px]">
-            <textarea
-              ref={textareaRef}
-              value={entry.content}
-              onChange={(e) => handleSaveContent(e.target.value)}
-              placeholder="Write your reflections, insights, wins, or meeting notes for today... (Tip: Click + Insert Image or + Attach File to place media inline between paragraphs)"
-              className="w-full h-full min-h-[320px] bg-transparent text-slate-100 placeholder-slate-600 text-sm leading-relaxed resize-y focus:outline-none font-sans"
-            />
-          </div>
-
-          {/* AI Summary Card (if generated) */}
-          {entry.aiSummary && (
-            <div className="mx-5 mb-4 p-4 bg-purple-950/30 border border-purple-800/40 rounded-2xl space-y-1">
-              <span className="text-[11px] font-extrabold text-purple-300 uppercase tracking-wider block">AI Daily Summary</span>
-              <p className="text-xs text-purple-200 whitespace-pre-wrap leading-relaxed">{entry.aiSummary}</p>
-            </div>
-          )}
-
-          {/* Attachments Section with compact preview thumbnails & Click to View in Drive popup */}
-          {entry.attachments.length > 0 && (
-            <div className="mx-5 mb-4 p-4 bg-slate-950/70 border border-slate-800 rounded-2xl space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                  Attached Media & Documents ({entry.attachments.length})
-                </span>
-                <span className="text-[10px] text-slate-500 font-mono">
-                  Click any item to view in Drive popup
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {entry.attachments.map((file) => (
-                  <div 
-                    key={file.id} 
-                    onClick={() => setViewerAttachment(file)}
-                    className="relative group rounded-2xl overflow-hidden border border-slate-800 bg-slate-900 shadow-md hover:border-indigo-600/70 transition cursor-pointer"
-                  >
-                    {/* Delete "X" Button on Top Right */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setFileToDelete(file);
-                      }}
-                      className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full bg-slate-950/85 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center transition shadow-lg border border-slate-700/60 hover:border-rose-500"
-                      title={`Delete ${file.name} from diary and Drive`}
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Thumbnail Preview Area */}
-                    {file.type.startsWith('image') && file.dataUrl ? (
-                      <div className="w-full h-24 sm:h-28 bg-slate-950 flex items-center justify-center overflow-hidden">
-                        <img 
-                          src={file.dataUrl} 
-                          alt={file.name} 
-                          className="w-full h-full object-cover transition group-hover:scale-105 duration-200" 
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-full h-24 sm:h-28 bg-slate-950 flex flex-col items-center justify-center gap-1.5 p-3 text-center border-b border-slate-800/80">
-                        <FileText className="w-7 h-7 text-indigo-400" />
-                        <span className="text-[10px] text-slate-400 uppercase font-mono">{file.type.split('/')[1] || 'FILE'}</span>
-                      </div>
-                    )}
-
-                    {/* File Metadata Label */}
-                    <div className="p-2.5">
-                      <span className="text-xs font-semibold text-slate-200 truncate block" title={file.name}>
-                        {file.name}
-                      </span>
-                      <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono mt-0.5">
-                        <span>{(file.size / 1024).toFixed(0)} KB</span>
-                        <span className="text-indigo-400 group-hover:underline flex items-center gap-0.5">
-                          <Eye className="w-2.5 h-2.5" /> View
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-        </div>
-      )}
-
-      {/* Universal Bottom Voice & File Toolbar (Accessible in Canvas & Editor) */}
-      <div className="p-4 bg-slate-900 border border-slate-800 rounded-3xl shadow-xl flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Dictation Language Picker */}
-          <select
-            value={dictationLang}
-            onChange={(e) => setDictationLang(e.target.value)}
-            className="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
-            title="Select spoken language for voice dictation"
-          >
-            {DICTATION_LANGUAGES.map((l) => (
-              <option key={l.code} value={l.code}>
-                {l.label}
-              </option>
-            ))}
-          </select>
-
-          {/* Standard Speech Dictation */}
+          {/* 🤖 In-Diary AI Chatbot Button */}
           <button
             type="button"
-            onClick={handleToggleDictation}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-              isDictating 
-                ? 'bg-rose-600 text-white animate-pulse' 
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-            }`}
-            title="Live speech dictation into journal"
+            onClick={() => setIsDiaryChatOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-950/80 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/80 text-xs font-bold transition shadow-sm cursor-pointer"
+            title="Open in-diary AI chatbot to analyze journal & attached docs or generate and paste content"
           >
-            {isDictating ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-            <span>{isDictating ? 'Listening...' : 'Dictate'}</span>
+            <Bot className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden sm:inline">Diary AI Chatbot</span>
           </button>
 
-          {/* AI Whisper Multilingual Voice-to-Diary */}
+          {/* 📁 Attachments Quick Scroll Pill */}
           <button
             type="button"
-            disabled={aiLoading}
-            onClick={handleToggleAIRecording}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-md ${
-              isAIRecording 
-                ? 'bg-rose-600 text-white animate-pulse' 
-                : 'bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/80 text-indigo-300'
-            }`}
-            title="Record spoken thoughts in ANY language - Whisper AI transcribes & formats it into your diary"
+            onClick={scrollToAttachments}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition"
+            title="View all attached documents in separate attachments section"
           >
-            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{isAIRecording ? 'Stop & Write Diary' : 'AI Voice-to-Diary'}</span>
+            <Paperclip className="w-3.5 h-3.5 text-slate-400" />
+            <span>Files ({entry.attachments.length})</span>
           </button>
 
-          {/* AI Error Correction & Sentence Polisher */}
-          <button
-            type="button"
-            disabled={aiLoading || !entry.content.trim()}
-            onClick={handleAiErrorCorrection}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-950/70 hover:bg-purple-900 text-purple-300 border border-purple-800/80 disabled:opacity-40 transition shadow-sm"
-            title="AI Error Correction: Remove voice stutter duplicates, fix grammar & rewrite into meaningful sentences"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-            <span>AI Error Correction</span>
-          </button>
-
-          {/* Read Aloud TTS */}
+          {/* 🔊 Text-to-Speech Read Aloud */}
           <button
             type="button"
             onClick={handleToggleSpeak}
-            className={`p-2 rounded-xl text-xs transition ${
+            className={`p-1.5 rounded-xl text-xs transition border ${
               isSpeaking 
-                ? 'bg-indigo-600 text-white' 
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+                ? 'bg-indigo-600 text-white border-indigo-500' 
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700'
             }`}
-            title="Read diary entry aloud"
+            title="Read diary aloud"
           >
             {isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
           </button>
-
-          {/* File & Photo Attachment */}
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-            title="Attach documents or photos to this date"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Attach Media</span>
-          </button>
-        </div>
-
-        <div className="flex items-center gap-3 text-slate-400 text-[11px] font-mono">
-          <span>{entry.content.length} chars</span>
-          <span>&bull;</span>
-          <span>{entry.attachments.length} attached media</span>
         </div>
       </div>
 
-      {/* Drive Media Viewer Popup Modal (View in Drive, Download, Preview) */}
+      {/* Notification Toast */}
+      {aiNotification && (
+        <div className="p-3 bg-indigo-950/90 border border-indigo-800/80 rounded-2xl text-indigo-200 text-xs font-semibold flex items-center justify-between shadow-lg animate-in fade-in">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-indigo-400 shrink-0" />
+            <span>{aiNotification}</span>
+          </div>
+          <button onClick={() => setAiNotification(null)} className="text-indigo-400 hover:text-white p-1">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
+      {/* =========================================================================
+          WORD DOCUMENT SHEET CANVAS (MAIN WRITING AREA)
+         ========================================================================= */}
+      <WordDocumentCanvas
+        content={entry.content}
+        attachments={entry.attachments}
+        onContentChange={handleSaveContent}
+        onOpenViewer={(att) => setViewerAttachment(att)}
+        onDeleteAttachment={(att) => setFileToDelete(att)}
+        onInsertMedia={handleInsertMediaFile}
+        date={currentDate}
+      />
+
+      {/* =========================================================================
+          SEPARATE ATTACHMENTS SECTION (ALL ATTACHED DOCUMENTS & MEDIA)
+         ========================================================================= */}
+      <div 
+        ref={attachmentsSectionRef}
+        className="bg-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-8 shadow-xl space-y-4"
+      >
+        <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-800">
+          <div>
+            <div className="flex items-center gap-2">
+              <FolderOpen className="w-5 h-5 text-indigo-400" />
+              <h2 className="text-sm sm:text-base font-extrabold text-white tracking-wide">
+                Attached Documents & Media ({entry.attachments.length})
+              </h2>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">
+              All files attached to this diary entry. Synced with your Google Drive vault.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs transition shadow-sm"
+              title="Upload and attach any file or document directly here"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ Upload Attachment</span>
+            </button>
+          </div>
+        </div>
+
+        {entry.attachments.length === 0 ? (
+          <div className="py-10 text-center space-y-2 border-2 border-dashed border-slate-800 rounded-2xl p-6">
+            <Paperclip className="w-8 h-8 text-slate-600 mx-auto" />
+            <p className="text-xs font-semibold text-slate-300">No documents or photos attached to this date yet.</p>
+            <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+              Click "+ Upload Attachment" or insert files between paragraphs in the Word Document above.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-1">
+            {entry.attachments.map((file) => {
+              const isImage = file.type.startsWith('image/');
+              return (
+                <div 
+                  key={file.id}
+                  className="rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-md hover:border-indigo-600/70 transition flex flex-col group"
+                >
+                  {/* Thumbnail / Header Area */}
+                  <div 
+                    onClick={() => setViewerAttachment(file)}
+                    className="w-full h-28 bg-slate-900 flex items-center justify-center overflow-hidden cursor-pointer relative group/thumb"
+                    title="Click to view/read in popup modal"
+                  >
+                    {isImage && file.dataUrl ? (
+                      <img 
+                        src={file.dataUrl} 
+                        alt={file.name} 
+                        className="w-full h-full object-cover transition-transform group-hover/thumb:scale-105" 
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center gap-1 text-slate-400">
+                        <FileText className="w-8 h-8 text-indigo-400" />
+                        <span className="text-[9px] font-mono uppercase text-slate-500">
+                          {file.type.split('/')[1] || 'FILE'}
+                        </span>
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover/thumb:opacity-100 flex items-center justify-center transition gap-1 text-xs text-white font-semibold backdrop-blur-[2px]">
+                      <Eye className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>View in Popup</span>
+                    </div>
+                  </div>
+
+                  {/* Metadata and Delete Action */}
+                  <div className="p-3 flex-1 flex flex-col justify-between space-y-2">
+                    <div>
+                      <span 
+                        onClick={() => setViewerAttachment(file)}
+                        className="text-xs font-bold text-white truncate block cursor-pointer hover:text-indigo-400 transition" 
+                        title={file.name}
+                      >
+                        {file.name}
+                      </span>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mt-1">
+                        <span>{(file.size / 1024).toFixed(0)} KB</span>
+                        <span className="text-emerald-400 flex items-center gap-0.5">
+                          <Cloud className="w-2.5 h-2.5" /> Drive
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
+                      <button
+                        type="button"
+                        onClick={() => setViewerAttachment(file)}
+                        className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 flex items-center gap-1"
+                        title="Open popup viewer"
+                      >
+                        <Maximize2 className="w-3 h-3" />
+                        <span>Read / View</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setFileToDelete(file)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 transition"
+                        title={`Delete ${file.name} from diary and Google Drive`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* =========================================================================
+          POPUP MODALS: DRIVE MEDIA VIEWER, DIARY AI CHATBOT & DELETE CONFIRMATION
+         ========================================================================= */}
+      
+      {/* 1. Drive Media Viewer Popup Modal (View in Drive, Zoom, Download, Read) */}
       <DriveMediaViewerModal
         isOpen={!!viewerAttachment}
         attachment={viewerAttachment}
@@ -1055,47 +602,50 @@ ${entry.content}`;
         date={currentDate}
       />
 
-      {/* Persistent Diary AI Companion Modal */}
+      {/* 2. In-Diary AI Chatbot Modal (Analyze current diary, analyze docs, or generate & paste) */}
       <DiaryAIChatModal
         date={currentDate}
         isOpen={isDiaryChatOpen}
         onClose={() => setIsDiaryChatOpen(false)}
-        onDiaryContentUpdated={(content) => handleSaveContent(content)}
+        onDiaryContentUpdated={(newContent) => {
+          handleSaveContent(newContent);
+          setAiNotification('✨ Pasted AI insights into your diary!');
+          setTimeout(() => setAiNotification(null), 3500);
+        }}
       />
 
-      {/* Delete Attachment Confirmation Popup Modal */}
+      {/* 3. Delete File Confirmation Modal */}
       {fileToDelete && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-rose-950/80 border border-rose-800 flex items-center justify-center text-rose-400 mx-auto shadow-lg shadow-rose-950/50">
-              <AlertTriangle className="w-6 h-6" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-rose-400">
+              <div className="p-2.5 rounded-2xl bg-rose-950/80 border border-rose-800">
+                <Trash2 className="w-5 h-5 text-rose-400" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Delete Attachment?</h3>
+                <p className="text-xs text-slate-400">This action will remove the file from your diary and Google Drive.</p>
+              </div>
             </div>
 
-            <div className="text-center space-y-1.5">
-              <h3 className="font-bold text-base text-white">Delete Attachment?</h3>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Are you sure you want to delete <span className="text-slate-200 font-semibold truncate block">"{fileToDelete.name}"</span>?
-              </p>
-              <p className="text-[11px] text-rose-400/90 leading-relaxed">
-                This will remove the file from your diary and permanently purge it from your Google Drive storage vault.
-              </p>
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-300 font-mono truncate">
+              {fileToDelete.name} ({(fileToDelete.size / 1024).toFixed(0)} KB)
             </div>
 
-            <div className="flex items-center gap-2 pt-2">
+            <div className="flex items-center justify-end gap-3 pt-2">
               <button
                 type="button"
                 onClick={() => setFileToDelete(null)}
-                className="flex-1 py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs transition"
+                className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleConfirmDeleteAttachment}
-                className="flex-1 py-2 px-3 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition shadow-md shadow-rose-600/30 flex items-center justify-center gap-1.5"
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition shadow-md"
               >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete from Drive</span>
+                Delete File
               </button>
             </div>
           </div>

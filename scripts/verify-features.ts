@@ -921,6 +921,42 @@ End of day conclusions and action items.`;
     assertEquals(cleaned, 'Paragraph A\n\nParagraph B', 'Tag removed cleanly without affecting surrounding text');
   });
 
+  await runTest('DiaryView', 'Word Document Bar, Attach File, and Separate Attachments Section verified', () => {
+    const diaryViewPath = path.resolve(process.cwd(), 'src/components/DiaryView.tsx');
+    const content = fs.readFileSync(diaryViewPath, 'utf8');
+
+    // Sticky Word Document Ribbon
+    assert(content.includes('+ Attach File'), 'Must provide + Attach File button');
+    assert(content.includes('✨ Fix Errors & Sentences'), 'Must provide AI sentence polisher button');
+    assert(content.includes('Diary AI Chatbot'), 'Must provide in-diary AI Chatbot trigger');
+    assert(content.includes('Attached Documents & Media'), 'Must have separate attachments section header');
+    assert(content.includes('+ Upload Attachment'), 'Must have direct + Upload Attachment button in attachments section');
+    assert(content.includes('DriveMediaViewerModal'), 'Must link to DriveMediaViewerModal for popup viewing');
+    assert(content.includes('DiaryAIChatModal'), 'Must link to DiaryAIChatModal for in-diary chat');
+  });
+
+  await runTest('WordDocumentCanvas', 'Compact Inline Media presentation and popup integration verified', () => {
+    const canvasPath = path.resolve(process.cwd(), 'src/components/WordDocumentCanvas.tsx');
+    const content = fs.readFileSync(canvasPath, 'utf8');
+
+    // Inline media must be small / compact, not giant fullscreen
+    assert(content.includes('max-w-sm rounded-2xl border border-slate-700/80 bg-slate-950/80'), 'Card has compact max-w-sm boundary');
+    assert(content.includes('h-40 sm:h-48'), 'Image has compact fixed height constraint');
+    assert(content.includes('Click to View in Popup'), 'Image has click to view in popup overlay');
+    assert(content.includes('onDeleteAttachment'), 'Must provide onDeleteAttachment button');
+    assert(content.includes('onOpenViewer'), 'Must provide onOpenViewer trigger');
+  });
+
+  await runTest('DiaryAIChatModal', 'Per-message Paste into Diary button verified', () => {
+    const chatModalPath = path.resolve(process.cwd(), 'src/components/DiaryAIChatModal.tsx');
+    const content = fs.readFileSync(chatModalPath, 'utf8');
+
+    assert(content.includes('Paste into Diary'), 'Must include Paste into Diary button for assistant messages');
+    assert(content.includes('onDiaryContentUpdated'), 'Must notify parent view of updated diary content');
+    assert(content.includes('StorageService.saveDiaryForDate'), 'Must save updated diary content to StorageService');
+  });
+
+
   // =========================================================================
   // SUITE 6: Speech Dictation, Audio Recording Lifecycle & Voice Formatting
   // =========================================================================
