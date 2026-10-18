@@ -14,18 +14,14 @@ import {
 import { AIProvider, AIState } from '../types';
 import { AIBrokerService } from '../services/aiBrokerService';
 
-import { LocalAIModal } from './LocalAIModal';
-
 interface DiaryAIModelSelectorProps {
   onModelChanged?: (provider: AIProvider) => void;
-  onOpenLocalAI?: () => void;
   title?: string;
   compact?: boolean;
 }
 
 export const DiaryAIModelSelector: React.FC<DiaryAIModelSelectorProps> = ({
   onModelChanged,
-  onOpenLocalAI,
   title,
   compact = false,
 }) => {
@@ -34,7 +30,6 @@ export const DiaryAIModelSelector: React.FC<DiaryAIModelSelectorProps> = ({
   const [editingProvider, setEditingProvider] = useState<AIProvider>(config.activeProvider);
   const [keyInput, setKeyInput] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
-  const [isLocalModalOpen, setIsLocalModalOpen] = useState(false);
 
   useEffect(() => {
     setConfig(AIBrokerService.getConfig());
@@ -51,16 +46,6 @@ export const DiaryAIModelSelector: React.FC<DiaryAIModelSelectorProps> = ({
     hint: string;
   }> = [
     {
-      id: 'groq',
-      name: 'Groq',
-      model: config.selectedModels.groq || 'llama-3.3-70b-versatile',
-      hasKey: !!config.apiKeys.groq?.trim(),
-      keySnippet: config.apiKeys.groq ? `gsk_...${config.apiKeys.groq.slice(-4)}` : undefined,
-      badge: 'Ultra-Fast 70B',
-      isFreeOrOffline: true,
-      hint: 'Free fast cloud tier',
-    },
-    {
       id: 'gemini',
       name: 'Google Gemini',
       model: config.selectedModels.gemini || 'gemini-1.5-flash',
@@ -71,22 +56,14 @@ export const DiaryAIModelSelector: React.FC<DiaryAIModelSelectorProps> = ({
       hint: 'Official free tier',
     },
     {
-      id: 'openai',
-      name: 'OpenAI',
-      model: config.selectedModels.openai || 'gpt-4o-mini',
-      hasKey: !!config.apiKeys.openai?.trim(),
-      keySnippet: config.apiKeys.openai ? `sk-...${config.apiKeys.openai.slice(-4)}` : undefined,
-      badge: 'GPT-4o',
-      hint: 'BYOK API Key',
-    },
-    {
-      id: 'local',
-      name: 'Local WebGPU AI',
-      model: config.localAI.modelName || 'Hermes-3-Llama-3.2-3B',
-      hasKey: true,
-      badge: '100% Offline',
+      id: 'groq',
+      name: 'Groq',
+      model: config.selectedModels.groq || 'llama-3.3-70b-versatile',
+      hasKey: !!config.apiKeys.groq?.trim(),
+      keySnippet: config.apiKeys.groq ? `gsk_...${config.apiKeys.groq.slice(-4)}` : undefined,
+      badge: 'Ultra-Fast 70B',
       isFreeOrOffline: true,
-      hint: 'No key needed / Private',
+      hint: 'Free fast cloud tier',
     },
     {
       id: 'custom',
@@ -96,6 +73,15 @@ export const DiaryAIModelSelector: React.FC<DiaryAIModelSelectorProps> = ({
       keySnippet: config.customConfig.apiKey ? `...${config.customConfig.apiKey.slice(-4)}` : undefined,
       badge: 'xAI Grok',
       hint: 'xAI Grok / Custom API',
+    },
+    {
+      id: 'openai',
+      name: 'OpenAI',
+      model: config.selectedModels.openai || 'gpt-4o-mini',
+      hasKey: !!config.apiKeys.openai?.trim(),
+      keySnippet: config.apiKeys.openai ? `sk-...${config.apiKeys.openai.slice(-4)}` : undefined,
+      badge: 'GPT-4o',
+      hint: 'BYOK API Key',
     },
   ];
 
@@ -107,7 +93,7 @@ export const DiaryAIModelSelector: React.FC<DiaryAIModelSelectorProps> = ({
     onModelChanged?.(prov);
 
     const target = providers.find(p => p.id === prov);
-    if (prov !== 'local' && !target?.hasKey) {
+    if (!target?.hasKey) {
       setEditingProvider(prov);
       setKeyInput('');
       setIsEditingKey(true);
@@ -265,47 +251,18 @@ export const DiaryAIModelSelector: React.FC<DiaryAIModelSelectorProps> = ({
             </span>
           </div>
 
-          {activeObj.id === 'local' ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (onOpenLocalAI) {
-                  onOpenLocalAI();
-                } else {
-                  setIsLocalModalOpen(true);
-                }
-              }}
-              className="px-2.5 py-1 bg-purple-950/80 hover:bg-purple-900 border border-purple-800 text-purple-300 hover:text-white font-semibold transition text-xs rounded-xl flex items-center gap-1.5 shadow-sm"
-            >
-              <span>⚙️ {config.localAI.installed ? 'Manage Local Model' : 'Install Local AI'}</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => {
-                setEditingProvider(activeObj.id);
-                setKeyInput('');
-                setIsEditingKey(true);
-              }}
-              className="text-indigo-400 hover:text-indigo-300 underline font-semibold transition"
-            >
-              {activeObj.hasKey ? 'Update Key' : '+ Enter API Key'}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              setEditingProvider(activeObj.id);
+              setKeyInput('');
+              setIsEditingKey(true);
+            }}
+            className="text-indigo-400 hover:text-indigo-300 underline font-semibold transition"
+          >
+            {activeObj.hasKey ? 'Update Key' : '+ Enter API Key'}
+          </button>
         </div>
-      )}
-
-      {/* Embedded Local AI Modal fallback if parent doesn't provide onOpenLocalAI */}
-      {!onOpenLocalAI && (
-        <LocalAIModal
-          isOpen={isLocalModalOpen}
-          onClose={() => setIsLocalModalOpen(false)}
-          onInstalled={() => {
-            const fresh = AIBrokerService.getConfig();
-            setConfig(fresh);
-            onModelChanged?.('local');
-          }}
-        />
       )}
     </div>
   );

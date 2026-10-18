@@ -9,7 +9,6 @@ import { DiaryModal } from './components/DiaryModal';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { GlobalChatbotDrawer } from './components/GlobalChatbotDrawer';
 import { SettingsModal } from './components/SettingsModal';
-import { LocalAIModal } from './components/LocalAIModal';
 import { AlarmAlertModal } from './components/AlarmAlertModal';
 import { GoogleLoginPage } from './components/GoogleLoginPage';
 import { BackupRestoreView } from './components/BackupRestoreView';
@@ -44,7 +43,6 @@ export function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isDiaryOpen, setIsDiaryOpen] = useState(false);
-  const [isLocalAIOpen, setIsLocalAIOpen] = useState(false);
   const [activeAlarm, setActiveAlarm] = useState<ActiveAlarmTrigger | null>(null);
 
   // States
@@ -192,14 +190,6 @@ export function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onConfigUpdated={refreshTasks}
-        onOpenLocalAI={() => setIsLocalAIOpen(true)}
-      />
-
-      {/* UNCENSORED & EFFICIENT LOCAL AI MODAL */}
-      <LocalAIModal
-        isOpen={isLocalAIOpen}
-        onClose={() => setIsLocalAIOpen(false)}
-        onInstalled={refreshTasks}
       />
 
       {/* ACTIVE ALARM TAKEOVER MODAL (15m & 5m prior) */}

@@ -27,12 +27,6 @@ export class AIBrokerService {
       modelName: 'grok-2-latest',
       apiKey: '',
     },
-    localAI: {
-      installed: true,
-      modelName: 'Llama-3.2-3B-Instruct (Advanced Text Analysis)',
-      progress: 100,
-      status: 'ready',
-    },
   };
 
   static getConfig(): AIState {
@@ -47,7 +41,6 @@ export class AIBrokerService {
         selectedModels: { ...this.defaultState.selectedModels, ...(parsed.selectedModels || {}) },
         discoveredModels: { ...this.defaultState.discoveredModels, ...(parsed.discoveredModels || {}) },
         customConfig: { ...this.defaultState.customConfig, ...(parsed.customConfig || {}) },
-        localAI: { ...this.defaultState.localAI, ...(parsed.localAI || {}) },
       };
     } catch {
       return this.defaultState;
@@ -200,8 +193,7 @@ export class AIBrokerService {
     // AUTO-FALLBACK: If NO explicit provider override was passed and current provider has NO key, pick first available provider that DOES have a key
     if (!providerOverride) {
       let hasCurrentKey = false;
-      if (provider === 'local') hasCurrentKey = true;
-      else if (provider === 'groq' && config.apiKeys.groq?.trim()) hasCurrentKey = true;
+      if (provider === 'groq' && config.apiKeys.groq?.trim()) hasCurrentKey = true;
       else if (provider === 'gemini' && config.apiKeys.gemini?.trim()) hasCurrentKey = true;
       else if (provider === 'openai' && config.apiKeys.openai?.trim()) hasCurrentKey = true;
       else if (provider === 'custom' && config.customConfig.apiKey?.trim()) hasCurrentKey = true;
@@ -211,16 +203,11 @@ export class AIBrokerService {
         else if (config.apiKeys.gemini?.trim()) provider = 'gemini';
         else if (config.apiKeys.openai?.trim()) provider = 'openai';
         else if (config.customConfig.apiKey?.trim()) provider = 'custom';
-        else if (config.localAI.installed) provider = 'local';
+        else provider = 'gemini';
       }
     }
 
-    // 1. Local AI Check
-    if (provider === 'local') {
-      return this.generateLocalAIResponse(prompt, systemInstruction);
-    }
-
-    // 2. Custom Provider (e.g. xAI Grok, DeepSeek, etc.)
+    // 1. Custom Provider (e.g. xAI Grok, DeepSeek, etc.)
     if (provider === 'custom') {
       if (!config.customConfig.apiKey?.trim()) {
         return this.generateSimulatedResponse(prompt, config.customConfig.providerName || 'xAI Grok', systemInstruction);
@@ -553,8 +540,8 @@ CRITICAL RULES:
       }
     }
 
-    // Local / Offline Smart Grammar & Spelling Correction Engine
-    return this.localGrammarCorrection(text, config.localAI.installed ? 'Local AI (SmolLM2-WebGPU)' : 'Tasker Built-In Proofreader');
+    // Built-in Smart Grammar & Spelling Correction Engine
+    return this.localGrammarCorrection(text, 'Tasker Built-In Proofreader');
   }
 
   // --- 🌐 MULTI-LANGUAGE SELECTIVE TRANSLATION ---
@@ -589,8 +576,8 @@ Return ONLY the direct translated text without any explanation, markdown backtic
       }
     }
 
-    // Local / Offline Translation Engine
-    return this.localTranslation(text, targetLanguage, config.localAI.installed ? 'Local AI (WebGPU)' : 'Tasker Offline Engine');
+    // Built-in Offline Translation Engine
+    return this.localTranslation(text, targetLanguage, 'Tasker Translation Engine');
   }
 
   // --- LOCAL OFFLINE GRAMMAR PROOFREADER ---
@@ -853,13 +840,6 @@ Be warm, personal, thoughtful, and insightful. Offer practical advice, encourage
     };
   }
 
-  // --- LOCAL AI & SIMULATED FALLBACK ---
-
-  private static generateLocalAIResponse(prompt: string, system: string): Promise<{ text: string; modelUsed: string }> {
-    const config = this.getConfig();
-    const model = config.localAI.modelName || 'Llama-3.2-3B-Instruct (Advanced Text Analysis)';
-    return this.generateSimulatedResponse(prompt, `${model} [On-Device WebGPU]`, system);
-  }
 
   /**
    * Deep Semantic Text Analysis Engine:
@@ -1153,7 +1133,7 @@ Regarding **${cleanPrompt}**, a structured, first-principles examination provide
       (lowerPrompt.includes('help') && lowerPrompt.length < 20)
     ) {
       return Promise.resolve({
-        text: `Hello! I am your **${providerName}**, running with advanced natural language comprehension and deep text analysis.\n\nHere are my core capabilities:\n1. 📑 **Deep Semantic Text Analysis**: Paste any passage, article, or notes to extract quantitative metrics, tone/sentiment, core arguments, critical nuance, and actionable recommendations.\n2. ❓ **Accurate Question Answering**: Ask "why", "how to", "compare X vs Y", or conceptual inquiries and receive structured, thorough breakdowns.\n3. 📋 **Workspace & Task Intelligence**: Extract actionable tasks, assign priorities, organize subtasks, and track deadlines.\n4. 🔍 **Cross-Date Indexed Memory**: Search notes, tasks, and media across all dates with clickable date pills.\n5. 🌐 **Multilingual Voice & Translation**: Translate text and format spoken thoughts in Telugu, Hindi, Spanish, French, and 10+ languages.\n6. 🛡️ **Air-Gapped & Private**: When using Local WebGPU AI, 100% of calculations stay on your machine hardware.\n\nWhat text would you like me to analyze, or what topic would you like to explore?`,
+        text: `Hello! I am your **${providerName}**, running with advanced natural language comprehension and deep text analysis.\n\nHere are my core capabilities:\n1. 📑 **Deep Semantic Text Analysis**: Paste any passage, article, or notes to extract quantitative metrics, tone/sentiment, core arguments, critical nuance, and actionable recommendations.\n2. ❓ **Accurate Question Answering**: Ask "why", "how to", "compare X vs Y", or conceptual inquiries and receive structured, thorough breakdowns.\n3. 📋 **Workspace & Task Intelligence**: Extract actionable tasks, assign priorities, organize subtasks, and track deadlines.\n4. 🔍 **Cross-Date Indexed Memory**: Search notes, tasks, and media across all dates with clickable date pills.\n5. 🌐 **Multilingual Voice & Translation**: Translate text and format spoken thoughts in Telugu, Hindi, Spanish, French, and 10+ languages.\n6. 🛡️ **Zero Tracking & Privacy**: Your data, keys, and journals are securely vaulted with your own Google account and drive.\n\nWhat text would you like me to analyze, or what topic would you like to explore?`,
         modelUsed: `${providerName} (Capabilities Engine)`,
       });
     }
@@ -1262,6 +1242,17 @@ Regarding **${cleanPrompt}**, a structured, first-principles examination provide
       } catch {
         // Continue
       }
+    }
+
+    // 8.5 Comparative Inquiries (e.g., Compare X vs Y, difference between A and B)
+    const cleanPrompt = prompt.replace(/[?.\s]+$/, '').trim();
+    const compMatch = cleanPrompt.match(/(?:difference between|compare|versus|\bvs\b|which is better|which one is better)\s+(.+?)(?:\s+and\s+|\s+to\s+|\s+vs\s+|\s+or\s+)(.+)/i);
+    if (compMatch) {
+      const answerResult = this.answerComplexQuery(prompt, providerName);
+      return Promise.resolve({
+        text: answerResult,
+        modelUsed: `${providerName} (Natural Language Comprehension Engine)`,
+      });
     }
 
     // 9. Technical & Coding Queries

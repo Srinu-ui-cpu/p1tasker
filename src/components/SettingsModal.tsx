@@ -28,14 +28,12 @@ interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfigUpdated: () => void;
-  onOpenLocalAI: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
   onConfigUpdated,
-  onOpenLocalAI,
 }) => {
   const [activeTab, setActiveTab] = useState<'ai' | 'cloud' | 'alarms'>('ai');
   const [aiConfig, setAiConfig] = useState<AIState>(() => AIBrokerService.getConfig());
@@ -262,8 +260,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">
                   Active AI Engine
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                  {(['gemini', 'groq', 'openai', 'custom', 'local'] as AIProvider[]).map((prov) => (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(['gemini', 'groq', 'openai', 'custom'] as AIProvider[]).map((prov) => (
                     <button
                       key={prov}
                       onClick={() => handleSaveAIConfig({ ...aiConfig, activeProvider: prov })}
@@ -273,7 +271,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-750 hover:text-white'
                       }`}
                     >
-                      <span>{prov === 'gemini' ? 'Gemini' : prov === 'groq' ? 'Groq' : prov === 'openai' ? 'OpenAI' : prov === 'custom' ? 'Custom' : 'Local AI'}</span>
+                      <span>{prov === 'gemini' ? 'Gemini' : prov === 'groq' ? 'Groq' : prov === 'openai' ? 'OpenAI' : 'Custom'}</span>
                       {aiConfig.activeProvider === prov && <Check className="w-3 h-3 text-white" />}
                     </button>
                   ))}
@@ -440,22 +438,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Local AI Launcher banner */}
-              <div className="p-4 bg-purple-950/30 rounded-2xl border border-purple-800/40 flex items-center justify-between">
-                <div>
-                  <span className="font-bold text-sm text-purple-200 block">Local WebGPU AI (100% Offline)</span>
-                  <p className="text-xs text-purple-300/80">Runs inside browser IndexedDB cache. No cloud requests.</p>
-                </div>
-                <button
-                  onClick={() => {
-                    onClose();
-                    onOpenLocalAI();
-                  }}
-                  className="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold transition shadow-md"
-                >
-                  {aiConfig.localAI.installed ? 'Installed (Manage)' : 'Install Local AI'}
-                </button>
-              </div>
 
               {/* Google Drive Cloud AI Keys Sync & Purge */}
               <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-3">
@@ -553,7 +535,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                   <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-bold block">Drive Folder</span>
-                    <span className="text-slate-200 font-semibold block mt-0.5">📁 Tasker OS Data Vault</span>
+                    <a
+                      href={GoogleAuthService.getDriveFolderUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-400 hover:text-indigo-300 font-semibold block mt-0.5 underline flex items-center gap-1"
+                    >
+                      <span>Tasker App Data</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
                   </div>
                   <div className="p-2.5 bg-slate-900/80 rounded-xl border border-slate-800">
                     <span className="text-[10px] text-slate-400 uppercase font-bold block">Last Synchronized</span>
@@ -561,6 +551,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {driveState.lastSyncedAt ? new Date(driveState.lastSyncedAt).toLocaleTimeString() : 'Never'}
                     </span>
                   </div>
+                </div>
+
+                {/* Google Drive Direct Folder Guidance */}
+                <div className="p-3 bg-indigo-950/40 rounded-xl border border-indigo-800/60 text-xs text-indigo-200 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-white flex items-center gap-1.5">
+                      <FolderSync className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Google Drive Folder Location</span>
+                    </span>
+                    <a
+                      href={GoogleAuthService.getDriveFolderUrl()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2 py-0.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] flex items-center gap-1 transition shadow-sm"
+                    >
+                      <span>Open in Drive</span>
+                      <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  </div>
+                  <p className="text-[11px] text-slate-300">
+                    Your vault is stored in the <strong>Tasker App Data</strong> folder at the root of your Google Drive ({driveState.activeStorageAccountEmail || driveState.userEmail || 'Active Account'}).
+                  </p>
+                  <p className="text-[10px] text-slate-400">
+                    💡 <em>Note: If you have multiple Google accounts logged in, ensure your Google Drive tab is viewing the account matching your Tasker login.</em>
+                  </p>
                 </div>
               </div>
 

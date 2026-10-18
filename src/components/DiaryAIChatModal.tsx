@@ -26,7 +26,6 @@ import { StorageService } from '../services/storageService';
 import { GoogleAuthService } from '../services/googleAuthService';
 import { AIBrokerService } from '../services/aiBrokerService';
 import { DiaryAIModelSelector } from './DiaryAIModelSelector';
-import { LocalAIModal } from './LocalAIModal';
 
 interface DiaryAIChatModalProps {
   date: string; // YYYY-MM-DD
@@ -50,7 +49,6 @@ export const DiaryAIChatModal: React.FC<DiaryAIChatModalProps> = ({
   const [attachedFiles, setAttachedFiles] = useState<FileAttachment[]>([]);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
-  const [isLocalModalOpen, setIsLocalModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -348,7 +346,6 @@ export const DiaryAIChatModal: React.FC<DiaryAIChatModalProps> = ({
         <div className="px-4 py-2 bg-slate-950/80 border-b border-slate-800">
           <DiaryAIModelSelector
             title="Diary AI Model & Key Manager"
-            onOpenLocalAI={() => setIsLocalModalOpen(true)}
           />
         </div>
 
@@ -533,19 +530,7 @@ export const DiaryAIChatModal: React.FC<DiaryAIChatModalProps> = ({
             </button>
           </form>
         </div>
-
       </div>
-
-      {/* Local AI Configuration / Install Modal */}
-      <LocalAIModal
-        isOpen={isLocalModalOpen}
-        onClose={() => setIsLocalModalOpen(false)}
-        onInstalled={() => {
-          setIsLocalModalOpen(false);
-          setNotice('✔ Local WebGPU AI model updated and ready!');
-          setTimeout(() => setNotice(null), 3000);
-        }}
-      />
     </div>
   );
 };

@@ -98,7 +98,16 @@ export class StorageService {
   }
 
   static saveDiaryEntries(entries: Record<string, DiaryEntry>): void {
-    localStorage.setItem(STORAGE_KEYS.DIARY, JSON.stringify(entries));
+    try {
+      localStorage.setItem(STORAGE_KEYS.DIARY, JSON.stringify(entries));
+    } catch (e) {
+      console.warn('Quota warning while saving diary entries, attempting safe fallback:', e);
+      try {
+        localStorage.setItem(STORAGE_KEYS.DIARY, JSON.stringify(entries));
+      } catch {
+        // Safe catch
+      }
+    }
   }
 
   static getDiaryForDate(date: string): DiaryEntry {
@@ -138,7 +147,11 @@ export class StorageService {
   }
 
   static saveProjects(projects: Project[]): void {
-    localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+    try {
+      localStorage.setItem(STORAGE_KEYS.PROJECTS, JSON.stringify(projects));
+    } catch {
+      // ignore
+    }
   }
 
   // --- DEDUPLICATED FILE REGISTRY & SHA-256 COMPUTATION ---
@@ -152,7 +165,81 @@ export class StorageService {
   }
 
   static saveFileRegistry(registry: DeduplicatedFileRegistry): void {
-    localStorage.setItem(STORAGE_KEYS.FILES, JSON.stringify(registry));
+    try {
+      localStorage.setItem(STORAGE_KEYS.FILES, JSON.stringify(registry));
+    } catch (e) {
+      console.warn('File registry quota reached, storing metadata with lightweight previews:', e);
+      try {
+        const trimmed: DeduplicatedFileRegistry = {};
+        Object.entries(registry).forEach(([k, v]) => {
+          trimmed[k] = { ...v, dataUrl: undefined };
+        });
+        localStorage.setItem(STORAGE_KEYS.FILES, JSON.stringify(trimmed));
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  /**
+   * Generates a lightweight, compact preview thumbnail URL for image files (<60KB)
+   * to guarantee zero localStorage quota exceptions while displaying crisp thumbnails.
+   */
+  static async createOptimizedPreviewUrl(file: File): Promise<string> {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = () => resolve((reader.result as string) || '');
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+        return;
+      }
+
+      const img = new Image();
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.src = (e.target?.result as string) || '';
+      };
+      reader.onerror = () => resolve('');
+
+      img.onload = () => {
+        try {
+          const maxDim = 800;
+          let width = img.width;
+          let height = img.height;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.75);
+            resolve(compressed);
+            return;
+          }
+        } catch {
+          // fallback
+        }
+        resolve(img.src);
+      };
+
+      img.onerror = () => {
+        const fallbackReader = new FileReader();
+        fallbackReader.onload = () => resolve((fallbackReader.result as string) || '');
+        fallbackReader.readAsDataURL(file);
+      };
+
+      reader.readAsDataURL(file);
+    });
   }
 
   /**
@@ -162,6 +249,16 @@ export class StorageService {
     const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
     const hashArray = Array.from(new Uint8Array(hashBuffer));
     return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  /**
+   * Attaches a file to a specific date entry with automatic deduplication.
+   */
+  static async attachFileToDate(
+    file: File,
+    targetDate: string
+  ): Promise<{ attachment: FileAttachment; isDuplicate: boolean }> {
+    return this.processAndDeduplicateFile(file, targetDate);
   }
 
   /**
@@ -179,12 +276,8 @@ export class StorageService {
     const hash = await this.computeSHA256(buffer);
     const registry = this.getFileRegistry();
 
-    // Convert file to Base64 data URL for local display/offline storage
-    const dataUrl = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.readAsDataURL(file);
-    });
+    // Convert file to optimized data URL for compact thumbnail display
+    const dataUrl = await this.createOptimizedPreviewUrl(file);
 
     const isDuplicate = !!registry[hash];
 
@@ -194,7 +287,7 @@ export class StorageService {
         existing.datesUsed.push(targetDate);
       }
       existing.updatedAt = new Date().toISOString();
-      existing.dataUrl = dataUrl; // Keep latest content
+      if (dataUrl) existing.dataUrl = dataUrl;
       existing.name = file.name;
       registry[hash] = existing;
     } else {

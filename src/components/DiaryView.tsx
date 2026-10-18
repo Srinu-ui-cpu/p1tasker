@@ -388,9 +388,17 @@ ${entry.content}`;
       StorageService.saveDiaryForDate(updated);
       setAiNotification(`Attached "${file.name}" to diary!`);
       setTimeout(() => setAiNotification(null), 3000);
+
+      // Proactively sync media file to Google Drive vault
+      if (GoogleAuthService.isAuthenticated()) {
+        GoogleAuthService.triggerDriveSync().catch(() => {});
+      }
     } catch (err: unknown) {
       const error = err as Error;
-      alert(`File upload error: ${error.message}`);
+      setAiNotification(`Attachment note: ${error.message || 'Saved locally'}`);
+      setTimeout(() => setAiNotification(null), 4000);
+    } finally {
+      if (e.target) e.target.value = '';
     }
   };
 

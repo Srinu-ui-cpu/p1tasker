@@ -69,7 +69,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({ onDataRest
     try {
       const { jsonString, filename } = await BackupService.createEncryptedBackup(
         backupKey.trim(),
-        activeAccount.email
+        activeAccount?.email || 'local_user'
       );
 
       BackupService.downloadBackupFile(jsonString, filename);
@@ -95,7 +95,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({ onDataRest
 
     try {
       const { filename } = await BackupService.saveEncryptedBackupToDrive(backupKey.trim());
-      setExportSuccess(`✔ Encrypted backup "${filename}" securely synced and saved to Google Drive vault for ${activeAccount.email}!`);
+      setExportSuccess(`✔ Encrypted backup "${filename}" securely synced and saved to Google Drive vault for ${activeAccount?.email || 'Local User'}!`);
       setBackupKey('');
     } catch (err: unknown) {
       const error = err as Error;
@@ -186,7 +186,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({ onDataRest
     });
 
     setImportSuccess(
-      `🎉 Successfully imported ${result.tasksCount} tasks, ${result.diaryCount} diary entries, and ${result.filesCount} files into ${activeAccount.email}!`
+      `🎉 Successfully imported ${result.tasksCount} tasks, ${result.diaryCount} diary entries, and ${result.filesCount} files into ${activeAccount?.email || 'Local Storage'}!`
     );
 
     setDecryptedData(null);
@@ -219,13 +219,13 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({ onDataRest
           {/* Active Account Pill */}
           <div className="bg-slate-950/80 border border-slate-700/80 rounded-2xl p-3 flex items-center gap-3">
             <img
-              src={activeAccount.avatarUrl}
-              alt={activeAccount.name}
+              src={activeAccount?.avatarUrl || 'https://ui-avatars.com/api/?name=Tasker+User&background=4285F4&color=fff'}
+              alt={activeAccount?.name || 'Local Vault'}
               className="w-9 h-9 rounded-full object-cover ring-2 ring-indigo-500/50"
             />
             <div>
               <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Active Storage Account</span>
-              <span className="text-xs font-semibold text-slate-200">{activeAccount.email}</span>
+              <span className="text-xs font-semibold text-slate-200">{activeAccount?.email || 'Local User (No Cloud Account)'}</span>
             </div>
           </div>
         </div>
@@ -495,7 +495,7 @@ export const BackupRestoreView: React.FC<BackupRestoreViewProps> = ({ onDataRest
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-emerald-600/30 flex items-center justify-center gap-2"
               >
                 <Sparkles className="w-4 h-4" />
-                <span>Apply Import & Sync to {activeAccount.email}</span>
+                <span>Apply Import & Sync to {activeAccount?.email || 'Local Storage'}</span>
               </button>
             </div>
           )}

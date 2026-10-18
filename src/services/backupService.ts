@@ -63,7 +63,7 @@ export class BackupService {
     }
 
     const activeAccount = GoogleAuthService.getActiveAccount();
-    const creatorEmail = customCreatorEmail || activeAccount.email || 'accountX@gmail.com';
+    const creatorEmail = customCreatorEmail || activeAccount?.email || 'accountX@gmail.com';
 
     // 1. Gather all system data
     const tasks = StorageService.getTasks();

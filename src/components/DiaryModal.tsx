@@ -196,21 +196,35 @@ export const DiaryModal: React.FC<DiaryModalProps> = ({
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const { attachment, isDuplicate } = await StorageService.processAndDeduplicateFile(file, date);
+    try {
+      let currentAttachments = [...entry.attachments];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const { attachment, isDuplicate } = await StorageService.processAndDeduplicateFile(file, date);
 
-      const updatedAttachments = [...entry.attachments, attachment];
-      const updated = { ...entry, attachments: updatedAttachments };
-      setEntry(updated);
-      StorageService.saveDiaryForDate(updated);
+        currentAttachments = [...currentAttachments, attachment];
+        const updated = { ...entry, attachments: currentAttachments };
+        setEntry(updated);
+        StorageService.saveDiaryForDate(updated);
 
-      if (isDuplicate) {
-        setDedupNotice(`⚡ Reused existing file "${file.name}" (SHA-256 deduplicated, 0 redundant bytes).`);
-      } else {
-        setDedupNotice(`Uploaded "${file.name}" to Google Drive folder.`);
+        if (isDuplicate) {
+          setDedupNotice(`⚡ Reused existing file "${file.name}" (SHA-256 deduplicated, 0 redundant bytes).`);
+        } else {
+          setDedupNotice(`Uploaded "${file.name}" to diary!`);
+        }
+        setTimeout(() => setDedupNotice(null), 4000);
       }
+
+      // Proactively sync media file to Google Drive vault
+      if (GoogleAuthService.isAuthenticated()) {
+        GoogleAuthService.triggerDriveSync().catch(() => {});
+      }
+    } catch (err: unknown) {
+      const error = err as Error;
+      setDedupNotice(`Attachment note: ${error.message || 'Saved locally'}`);
       setTimeout(() => setDedupNotice(null), 4000);
+    } finally {
+      if (e.target) e.target.value = '';
     }
   };
 

@@ -33,7 +33,6 @@ import { StorageService } from '../services/storageService';
 import { GoogleAuthService } from '../services/googleAuthService';
 import { AIBrokerService } from '../services/aiBrokerService';
 import { DiaryAIModelSelector } from './DiaryAIModelSelector';
-import { LocalAIModal } from './LocalAIModal';
 
 interface GlobalChatbotDrawerProps {
   isOpen: boolean;
@@ -58,7 +57,6 @@ export const GlobalChatbotDrawer: React.FC<GlobalChatbotDrawerProps> = ({
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   const [currentProvider, setCurrentProvider] = useState<AIProvider>(activeProvider);
-  const [isLocalModalOpen, setIsLocalModalOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -406,7 +404,6 @@ export const GlobalChatbotDrawer: React.FC<GlobalChatbotDrawerProps> = ({
           <div className="p-2 sm:p-3 bg-slate-950/80 border-b border-slate-800">
             <DiaryAIModelSelector
               title="Chatbot AI Model & Key Manager"
-              onOpenLocalAI={() => setIsLocalModalOpen(true)}
               onModelChanged={(newProv) => {
                 setCurrentProvider(newProv);
               }}
@@ -544,7 +541,6 @@ export const GlobalChatbotDrawer: React.FC<GlobalChatbotDrawerProps> = ({
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mr-1">Model:</span>
               {[
-                { id: 'local' as AIProvider, label: 'Local AI', icon: '🧠', tag: 'WebGPU Offline' },
                 { id: 'gemini' as AIProvider, label: 'Gemini', icon: '✨', tag: 'Google AI' },
                 { id: 'groq' as AIProvider, label: 'Groq', icon: '⚡', tag: 'Llama 70B' },
                 { id: 'custom' as AIProvider, label: 'xAI Grok', icon: '🚀', tag: 'grok-2' },
@@ -560,9 +556,6 @@ export const GlobalChatbotDrawer: React.FC<GlobalChatbotDrawerProps> = ({
                       const cfg = AIBrokerService.getConfig();
                       cfg.activeProvider = m.id;
                       AIBrokerService.saveConfig(cfg);
-                      if (m.id === 'local' && !cfg.localAI.installed) {
-                        setIsLocalModalOpen(true);
-                      }
                     }}
                     className={`px-2.5 py-1 rounded-xl font-medium transition flex items-center gap-1.5 shrink-0 border ${
                       isActive
@@ -577,16 +570,6 @@ export const GlobalChatbotDrawer: React.FC<GlobalChatbotDrawerProps> = ({
                 );
               })}
             </div>
-
-            {currentProvider === 'local' && (
-              <button
-                type="button"
-                onClick={() => setIsLocalModalOpen(true)}
-                className="text-[10px] text-purple-400 hover:text-purple-300 font-medium flex items-center gap-1 shrink-0 px-2.5 py-1 rounded-xl bg-purple-950/50 border border-purple-800/60 hover:bg-purple-900/40 transition"
-              >
-                <span>⚙️ Local Model</span>
-              </button>
-            )}
           </div>
 
           {/* Bottom Chat Input Form */}
@@ -632,13 +615,6 @@ export const GlobalChatbotDrawer: React.FC<GlobalChatbotDrawerProps> = ({
         </div>
 
       </div>
-
-      {/* Local AI Offline Model Manager / Downloader */}
-      <LocalAIModal 
-        isOpen={isLocalModalOpen}
-        onClose={() => setIsLocalModalOpen(false)}
-        onInstalled={() => {}}
-      />
     </div>
   );
 };

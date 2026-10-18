@@ -340,13 +340,24 @@ export class GoogleAuthService {
   }
 
   /**
-   * Checks or creates the `📁 Tasker App Data` folder in Google Drive.
+   * Returns the direct web URL to the user's Tasker App Data folder in Google Drive.
+   */
+  static getDriveFolderUrl(): string {
+    const state = this.getDriveState();
+    if (state.folderId && state.folderId !== 'tasker-app-data-vault') {
+      return `https://drive.google.com/drive/folders/${state.folderId}`;
+    }
+    return `https://drive.google.com/drive/search?q=Tasker`;
+  }
+
+  /**
+   * Checks or creates the visible `Tasker App Data` folder in user's root Google Drive.
    */
   private static async initDriveFolder(accessToken: string): Promise<string> {
     try {
-      // Search for existing Tasker App Data folder
-      const query = encodeURIComponent("name = '📁 Tasker App Data' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
-      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`, {
+      // Search for existing Tasker App Data folder in My Drive
+      const query = encodeURIComponent("(name = 'Tasker App Data' or name = '📁 Tasker App Data') and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,parents)`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
 
@@ -361,7 +372,7 @@ export class GoogleAuthService {
         }
       }
 
-      // Create new folder
+      // Create new visible folder in root of "My Drive"
       const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
         method: 'POST',
         headers: {
@@ -369,8 +380,9 @@ export class GoogleAuthService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: '📁 Tasker App Data',
+          name: 'Tasker App Data',
           mimeType: 'application/vnd.google-apps.folder',
+          parents: ['root'], // Explicitly in My Drive root so it's 100% visible to the user!
           description: 'Autonomous Tasker OS private vault for tasks, diary entries, and media files.',
         }),
       });
@@ -382,8 +394,8 @@ export class GoogleAuthService {
         StorageService.saveGoogleDriveState(state);
         return createData.id;
       }
-    } catch {
-      // Fallback
+    } catch (e) {
+      console.warn('Could not initialize Google Drive folder directly:', e);
     }
     return 'tasker-app-data-vault';
   }
@@ -398,8 +410,9 @@ export class GoogleAuthService {
 
     try {
       if (state.accessToken) {
-        // If real OAuth token is available, sync to real Google Drive
-        const folderId = state.folderId || (await this.initDriveFolder(state.accessToken));
+        const validFolderId = (state.folderId && state.folderId !== 'tasker-app-data-vault')
+          ? state.folderId
+          : (await this.initDriveFolder(state.accessToken));
 
         const vaultData = {
           syncedAt: new Date().toISOString(),
@@ -413,7 +426,7 @@ export class GoogleAuthService {
 
         const metadata = {
           name: `tasker_vault_${state.userEmail?.replace(/[^a-zA-Z0-9]/g, '_') || 'user'}.json`,
-          parents: folderId ? [folderId] : undefined,
+          parents: (validFolderId && validFolderId !== 'tasker-app-data-vault') ? [validFolderId] : undefined,
           mimeType: 'application/json',
         };
 

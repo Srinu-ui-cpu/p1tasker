@@ -97,22 +97,13 @@ export interface DeduplicatedFileRegistry {
   };
 }
 
-export type AIProvider = 'gemini' | 'groq' | 'openai' | 'custom' | 'local';
+export type AIProvider = 'gemini' | 'groq' | 'openai' | 'custom';
 
 export interface CustomAIConfig {
   providerName: string; // e.g. "xAI Grok", "DeepSeek", "OpenRouter"
   baseUrl: string; // e.g. "https://api.x.ai/v1"
   modelName: string; // e.g. "grok-2-latest"
   apiKey: string;
-}
-
-export interface LocalAIState {
-  installed: boolean;
-  modelName: string;
-  progress: number; // 0 - 100
-  downloadSpeed?: string;
-  status: 'idle' | 'checking' | 'downloading' | 'compiling' | 'ready' | 'error';
-  errorMessage?: string;
 }
 
 export interface AIState {
@@ -133,7 +124,6 @@ export interface AIState {
     openai: string[];
   };
   customConfig: CustomAIConfig;
-  localAI: LocalAIState;
 }
 
 export interface GoogleAccount {
