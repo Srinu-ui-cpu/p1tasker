@@ -36,7 +36,7 @@ import { GoogleAuthService } from '../services/googleAuthService';
 import { DiaryAIChatModal } from './DiaryAIChatModal';
 import { DiaryAIModelSelector } from './DiaryAIModelSelector';
 import { DriveMediaViewerModal } from './DriveMediaViewerModal';
-import { WordDocumentCanvas } from './WordDocumentCanvas';
+import { WordDocumentCanvas, parseDocumentContent } from './WordDocumentCanvas';
 
 interface DiaryViewProps {
   currentDate: string; // YYYY-MM-DD
@@ -150,21 +150,46 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
     StorageService.saveDiaryForDate(updated);
   };
 
+  const dictationBaseRef = useRef<string>('');
+
   // --- 🎙️ SPEECH DICTATION ---
   const handleToggleDictation = () => {
     if (isDictating) {
       SpeechService.stopDictation();
       setIsDictating(false);
+      setAiNotification('Dictation stopped.');
+      setTimeout(() => setAiNotification(null), 3000);
     } else {
+      dictationBaseRef.current = entry.content;
       setIsDictating(true);
-      SpeechService.startDictation(
-        (transcript) => {
-          const newContent = entry.content ? `${entry.content} ${transcript}` : transcript;
+      setAiNotification(`🎙️ Listening in ${dictationLang}... Speak into your microphone.`);
+
+      const started = SpeechService.startDictation(
+        (transcript, isFinal) => {
+          const base = dictationBaseRef.current;
+          const separator = base && !base.endsWith(' ') ? ' ' : '';
+          const newContent = `${base}${separator}${transcript}`;
           handleSaveContent(newContent);
+          if (isFinal) {
+            dictationBaseRef.current = newContent;
+          }
         },
-        () => setIsDictating(false),
+        (errorMsg) => {
+          setIsDictating(false);
+          setAiNotification(errorMsg || 'Speech recognition interrupted or microphone permission denied.');
+          setTimeout(() => setAiNotification(null), 4000);
+        },
+        () => {
+          setIsDictating(false);
+        },
         dictationLang
       );
+
+      if (!started) {
+        setIsDictating(false);
+        setAiNotification('Speech recognition is not supported or microphone access was denied.');
+        setTimeout(() => setAiNotification(null), 4000);
+      }
     }
   };
 
@@ -176,44 +201,48 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
       setAiNotification('Processing audio with AI Whisper model in all languages...');
 
       try {
-        const audioBlob = await SpeechService.stopMediaRecording();
-        const transcription = await SpeechService.transcribeAudioWithAI(audioBlob);
+        const { transcript, modelUsed } = await SpeechService.stopAIRecordingAndTranscribe();
 
-        if (!transcription.trim()) {
-          setAiNotification('No speech detected in audio.');
+        if (!transcript || !transcript.trim()) {
+          setAiNotification('No speech detected in audio recording.');
           return;
         }
 
-        const formatted = await SpeechService.formatVoiceIntoDiary(transcription, currentDate);
-        const newContent = entry.content
-          ? `${entry.content}\n\n---\n### 🎙️ Spoken Reflection (${new Date().toLocaleTimeString()}):\n${formatted.formattedContent}`
-          : formatted.formattedContent;
+        const formatted = await SpeechService.formatVoiceIntoDiary(transcript, dictationLang);
+        const separator = entry.content.trim() ? '\n\n' : '';
+        const newContent = `${entry.content}${separator}${formatted.formattedDiary}`;
 
         const updated: DiaryEntry = {
           ...entry,
           content: newContent,
-          mood: entry.mood || (formatted.detectedMood as Mood) || undefined,
+          mood: entry.mood || (formatted.mood as Mood) || undefined,
           updatedAt: new Date().toISOString(),
         };
 
         setEntry(updated);
         StorageService.saveDiaryForDate(updated);
-        setAiNotification(`✨ Spoken audio transcribed and formatted into diary! Mood: ${formatted.detectedMood}`);
+        setAiNotification(`✨ AI transcribed (${modelUsed}) and crafted your diary reflection!`);
       } catch (err: unknown) {
         const error = err as Error;
-        setAiNotification(`Audio processing error: ${error.message || 'Check audio setup'}`);
+        setAiNotification(`AI Voice note: ${error.message || 'Check microphone setup'}`);
       } finally {
         setAiLoading(false);
         setTimeout(() => setAiNotification(null), 5000);
       }
     } else {
       try {
-        await SpeechService.startMediaRecording();
-        setIsAIRecording(true);
-        setAiNotification('🎙️ Recording voice thoughts in any language... Click button again when finished speaking.');
+        const started = await SpeechService.startAIRecording();
+        if (started) {
+          setIsAIRecording(true);
+          setAiNotification('🎙️ Recording voice thoughts in any language... Click button again when finished speaking.');
+        } else {
+          setAiNotification('Could not access microphone. Please grant browser microphone permissions.');
+          setTimeout(() => setAiNotification(null), 4000);
+        }
       } catch (err: unknown) {
         const error = err as Error;
-        alert(`Could not start recording: ${error.message}`);
+        setAiNotification(`Could not start recording: ${error.message}`);
+        setTimeout(() => setAiNotification(null), 4000);
       }
     }
   };
@@ -224,7 +253,11 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
       SpeechService.stopSpeaking();
       setIsSpeaking(false);
     } else {
-      if (!entry.content.trim()) return;
+      if (!entry.content.trim()) {
+        setAiNotification('Diary is empty. Write or dictate something to read aloud.');
+        setTimeout(() => setAiNotification(null), 3000);
+        return;
+      }
       setIsSpeaking(true);
       SpeechService.speakText(entry.content, () => setIsSpeaking(false));
     }
@@ -388,15 +421,30 @@ ${entry.content}`;
   };
 
   // --- INLINE MEDIA INSERTION & ATTACHMENTS ---
-  const handleInsertMediaFile = async (file: File) => {
+  const handleInsertMediaFile = async (file: File, insertAfterIndex?: number) => {
     try {
       const { attachment } = await StorageService.attachFileToDate(file, currentDate);
 
-      // Splicing inline tag {{attachment:<id>}} at cursor position or appending
+      // Splicing inline tag {{attachment:<id>}} at cursor position, after block, or appending
       let newContent = entry.content;
       const marker = `\n\n{{attachment:${attachment.id}}}\n\n`;
 
-      if (textareaRef.current) {
+      if (insertAfterIndex !== undefined && insertAfterIndex !== null) {
+        const blocks = parseDocumentContent(entry.content, entry.attachments);
+        if (insertAfterIndex >= 0 && insertAfterIndex < blocks.length) {
+          const beforeBlocks = blocks.slice(0, insertAfterIndex + 1);
+          const afterBlocks = blocks.slice(insertAfterIndex + 1);
+          const beforeStr = beforeBlocks
+            .map((b) => (b.type === 'text' ? b.content || '' : b.originalTag || `{{attachment:${b.id}}}`))
+            .join('');
+          const afterStr = afterBlocks
+            .map((b) => (b.type === 'text' ? b.content || '' : b.originalTag || `{{attachment:${b.id}}}`))
+            .join('');
+          newContent = `${beforeStr.trimEnd()}${marker}${afterStr.trimStart()}`;
+        } else {
+          newContent = `${entry.content.trimEnd()}${marker}`;
+        }
+      } else if (textareaRef.current) {
         const { selectionStart, selectionEnd } = textareaRef.current;
         if (selectionStart !== undefined && selectionStart >= 0) {
           const before = entry.content.substring(0, selectionStart);
@@ -615,10 +663,16 @@ ${entry.content}`;
             accept="image/*"
             className="hidden"
           />
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+          />
           <button
             type="button"
             onClick={() => imageInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-slate-800 text-xs font-semibold transition shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-indigo-300 border border-slate-800 text-xs font-semibold transition shadow-sm cursor-pointer"
             title="Upload and insert an image inline at your cursor position"
           >
             <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
@@ -628,7 +682,7 @@ ${entry.content}`;
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-semibold transition shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-semibold transition shadow-sm cursor-pointer"
             title="Upload and attach any file/document inline"
           >
             <FileUp className="w-3.5 h-3.5 text-slate-400" />
@@ -865,78 +919,89 @@ ${entry.content}`;
             </div>
           )}
 
-          {/* Bottom Voice & File Toolbar */}
-          <div className="p-4 bg-slate-950/90 border-t border-slate-800 flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Dictation Language Picker */}
-              <select
-                value={dictationLang}
-                onChange={(e) => setDictationLang(e.target.value)}
-                className="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
-                title="Select spoken language for voice dictation"
-              >
-                {DICTATION_LANGUAGES.map((l) => (
-                  <option key={l.code} value={l.code}>
-                    {l.label}
-                  </option>
-                ))}
-              </select>
-
-              {/* Standard Speech Dictation */}
-              <button
-                onClick={handleToggleDictation}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
-                  isDictating 
-                    ? 'bg-rose-600 text-white animate-pulse' 
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                }`}
-                title="Live speech dictation into journal"
-              >
-                {isDictating ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-                <span>{isDictating ? 'Listening...' : 'Dictate'}</span>
-              </button>
-
-              {/* AI Whisper Multilingual Voice-to-Diary */}
-              <button
-                disabled={aiLoading}
-                onClick={handleToggleAIRecording}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-md ${
-                  isAIRecording 
-                    ? 'bg-rose-600 text-white animate-pulse' 
-                    : 'bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/80 text-indigo-300'
-                }`}
-                title="Record spoken thoughts in ANY language - Whisper AI transcribes & formats it into your diary"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-                <span>{isAIRecording ? 'Stop & Write Diary' : 'AI Voice-to-Diary'}</span>
-              </button>
-
-              {/* Read Aloud TTS */}
-              <button
-                onClick={handleToggleSpeak}
-                className={`p-2 rounded-xl text-xs transition ${
-                  isSpeaking 
-                    ? 'bg-indigo-600 text-white' 
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-                }`}
-                title="Read diary entry aloud"
-              >
-                {isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-              </button>
-
-              {/* File & Photo Attachment */}
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
-                title="Attach documents or photos to this date"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>Attach Media</span>
-              </button>
-            </div>
-          </div>
         </div>
       )}
+
+      {/* Universal Bottom Voice & File Toolbar (Accessible in Canvas & Editor) */}
+      <div className="p-4 bg-slate-900 border border-slate-800 rounded-3xl shadow-xl flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Dictation Language Picker */}
+          <select
+            value={dictationLang}
+            onChange={(e) => setDictationLang(e.target.value)}
+            className="bg-slate-800 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none"
+            title="Select spoken language for voice dictation"
+          >
+            {DICTATION_LANGUAGES.map((l) => (
+              <option key={l.code} value={l.code}>
+                {l.label}
+              </option>
+            ))}
+          </select>
+
+          {/* Standard Speech Dictation */}
+          <button
+            type="button"
+            onClick={handleToggleDictation}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+              isDictating 
+                ? 'bg-rose-600 text-white animate-pulse' 
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+            }`}
+            title="Live speech dictation into journal"
+          >
+            {isDictating ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+            <span>{isDictating ? 'Listening...' : 'Dictate'}</span>
+          </button>
+
+          {/* AI Whisper Multilingual Voice-to-Diary */}
+          <button
+            type="button"
+            disabled={aiLoading}
+            onClick={handleToggleAIRecording}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-md ${
+              isAIRecording 
+                ? 'bg-rose-600 text-white animate-pulse' 
+                : 'bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/80 text-indigo-300'
+            }`}
+            title="Record spoken thoughts in ANY language - Whisper AI transcribes & formats it into your diary"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+            <span>{isAIRecording ? 'Stop & Write Diary' : 'AI Voice-to-Diary'}</span>
+          </button>
+
+          {/* Read Aloud TTS */}
+          <button
+            type="button"
+            onClick={handleToggleSpeak}
+            className={`p-2 rounded-xl text-xs transition ${
+              isSpeaking 
+                ? 'bg-indigo-600 text-white' 
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
+            }`}
+            title="Read diary entry aloud"
+          >
+            {isSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </button>
+
+          {/* File & Photo Attachment */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+            title="Attach documents or photos to this date"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Attach Media</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3 text-slate-400 text-[11px] font-mono">
+          <span>{entry.content.length} chars</span>
+          <span>&bull;</span>
+          <span>{entry.attachments.length} attached media</span>
+        </div>
+      </div>
 
       {/* Drive Media Viewer Popup Modal (View in Drive, Download, Preview) */}
       <DriveMediaViewerModal

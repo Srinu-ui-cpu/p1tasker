@@ -31,7 +31,7 @@ interface WordDocumentCanvasProps {
   onContentChange: (newContent: string) => void;
   onOpenViewer: (attachment: FileAttachment) => void;
   onDeleteAttachment: (attachment: FileAttachment) => void;
-  onInsertMedia: (file: File) => Promise<void>;
+  onInsertMedia: (file: File, insertAfterIndex?: number) => Promise<void>;
   date: string;
 }
 
@@ -142,7 +142,7 @@ export const WordDocumentCanvas: React.FC<WordDocumentCanvasProps> = ({
     if (!file) return;
 
     try {
-      await onInsertMedia(file);
+      await onInsertMedia(file, insertTargetIndex !== null ? insertTargetIndex : undefined);
     } finally {
       if (e.target) e.target.value = '';
       setInsertTargetIndex(null);

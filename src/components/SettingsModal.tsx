@@ -160,38 +160,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setTimeout(() => setAccountFeedback(null), 3500);
   };
 
-  // --- Backup Export / Import ---
-  const handleExportBackup = () => {
-    const jsonStr = StorageService.exportFullBackup();
-    const blob = new Blob([jsonStr], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `tasker-backup-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      if (content) {
-        const success = StorageService.importFullBackup(content);
-        if (success) {
-          alert('Backup restored successfully!');
-          onConfigUpdated();
-        } else {
-          alert('Invalid backup file.');
-        }
-      }
-    };
-    reader.readAsText(file);
-  };
-
   return (
     <div className="fixed inset-0 z-50 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4">
       <div className="bg-slate-900 border border-slate-800 rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -715,36 +683,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     );
                   })}
-                </div>
-              </div>
-
-              {/* Local Backup & Vault Export */}
-              <div className="p-4 bg-slate-950/60 rounded-2xl border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-slate-300 uppercase tracking-wider block">
-                    Vault Backup & Synchronization File
-                  </span>
-                  <span className="text-[10px] text-emerald-400 font-mono">Tasks • Diary • Media • Chats</span>
-                </div>
-                <p className="text-xs text-slate-400">
-                  Export or import a full backup of all tasks, journal logs, media files, and ChatGPT-style conversations to sync across Google accounts.
-                </p>
-
-                <div className="flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleExportBackup}
-                    className="flex items-center gap-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-600/30"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Export Vault Backup</span>
-                  </button>
-
-                  <label className="flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold border border-slate-700 cursor-pointer transition">
-                    <Upload className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>Import Vault Backup</span>
-                    <input type="file" accept=".json,.taskerbackup" onChange={handleImportBackup} className="hidden" />
-                  </label>
                 </div>
               </div>
 

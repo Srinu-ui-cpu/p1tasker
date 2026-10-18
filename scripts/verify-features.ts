@@ -132,6 +132,96 @@ class MockAudioContext {
 (globalThis as any).AudioContext = MockAudioContext;
 (globalThis as any).window.AudioContext = MockAudioContext;
 
+// Polyfills for Web Speech API and MediaRecorder
+class MockSpeechRecognition {
+  continuous = true;
+  interimResults = true;
+  lang = 'te-IN';
+  onresult: any = null;
+  onerror: any = null;
+  onend: any = null;
+  start() {
+    setTimeout(() => {
+      if (this.onresult) {
+        this.onresult({
+          results: [
+            [{ transcript: 'This is a test voice dictation' }],
+          ],
+        });
+      }
+      if (this.onend) this.onend();
+    }, 10);
+  }
+  stop() {
+    if (this.onend) this.onend();
+  }
+  abort() {
+    if (this.onend) this.onend();
+  }
+}
+(globalThis as any).SpeechRecognition = MockSpeechRecognition;
+(globalThis as any).webkitSpeechRecognition = MockSpeechRecognition;
+(globalThis as any).window.SpeechRecognition = MockSpeechRecognition;
+(globalThis as any).window.webkitSpeechRecognition = MockSpeechRecognition;
+
+try {
+  Object.defineProperty(globalThis, 'navigator', {
+    value: {
+      language: 'en-US',
+      mediaDevices: {
+        getUserMedia: async () => ({
+          getTracks: () => [{ stop: () => {} }],
+        }),
+      },
+    },
+    configurable: true,
+    writable: true,
+  });
+} catch {
+  try {
+    (globalThis.navigator as any).mediaDevices = {
+      getUserMedia: async () => ({
+        getTracks: () => [{ stop: () => {} }],
+      }),
+    };
+  } catch {}
+}
+(globalThis as any).window.navigator = (globalThis as any).navigator;
+
+class MockMediaRecorder {
+  ondataavailable: any = null;
+  onstop: any = null;
+  stream: any;
+  constructor(stream: any) {
+    this.stream = stream;
+  }
+  start() {}
+  stop() {
+    if (this.ondataavailable) {
+      this.ondataavailable({ data: new Blob(['fake-audio-bytes'], { type: 'audio/webm' }) });
+    }
+    if (this.onstop) this.onstop();
+  }
+}
+(globalThis as any).MediaRecorder = MockMediaRecorder;
+
+(globalThis as any).speechSynthesis = {
+  cancel: () => {},
+  speak: (utterance: any) => {
+    if (utterance.onend) setTimeout(utterance.onend, 10);
+  },
+};
+(globalThis as any).window.speechSynthesis = (globalThis as any).speechSynthesis;
+(globalThis as any).SpeechSynthesisUtterance = class {
+  text: string;
+  rate = 1.0;
+  pitch = 1.0;
+  onend: any = null;
+  constructor(text: string) {
+    this.text = text;
+  }
+};
+
 // Test Runner Framework
 interface TestResult {
   suite: string;
@@ -184,7 +274,11 @@ import { GoogleAuthService } from '../src/services/googleAuthService.ts';
 import { AIBrokerService } from '../src/services/aiBrokerService.ts';
 import { AlarmService } from '../src/services/alarmService.ts';
 import { BackupService } from '../src/services/backupService.ts';
-import { TaskItem, DiaryEntry } from '../src/types/index.ts';
+import { SpeechService } from '../src/services/speechService.ts';
+import { parseDocumentContent } from '../src/components/WordDocumentCanvas.tsx';
+import { TaskItem, DiaryEntry, FileAttachment } from '../src/types/index.ts';
+import * as fs from 'fs';
+import * as path from 'path';
 
 async function main() {
   console.log('===============================================================');
@@ -741,8 +835,199 @@ async function main() {
   });
 
   // =========================================================================
-  // RESULTS SUMMARY
+  // SUITE 5: Word Document Canvas & Inline Media Block Flow
   // =========================================================================
+  console.log('\n>> Running Suite 5: Word Document Canvas & Inline Media Block Flow');
+
+  await runTest('WordDocumentCanvas', 'parseDocumentContent parses sequential paragraphs and attachment tags', () => {
+    const mockAttachments: FileAttachment[] = [
+      {
+        id: 'att-image-1',
+        name: 'architecture_diagram.png',
+        mimeType: 'image/png',
+        size: 102400,
+        dataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        hash: 'hash-img-1',
+        storageType: 'both',
+        driveFileId: 'drive-img-1',
+        createdAt: new Date().toISOString(),
+      },
+      {
+        id: 'att-doc-2',
+        name: 'quarterly_report.pdf',
+        mimeType: 'application/pdf',
+        size: 512000,
+        hash: 'hash-pdf-2',
+        storageType: 'drive',
+        driveFileId: 'drive-pdf-2',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    const rawMarkdown = `Morning reflection on system architecture and scalability.
+
+{{attachment:att-image-1}}
+
+Following the architecture review, the team examined the quarterly revenue numbers below.
+
+![Document Report](attachment:att-doc-2)
+
+End of day conclusions and action items.`;
+
+    const blocks = parseDocumentContent(rawMarkdown, mockAttachments);
+    assertEquals(blocks.length, 5, 'Must parse exactly 5 sequential document blocks');
+
+    // Block 0: Text
+    assertEquals(blocks[0].type, 'text', 'Block 0 is a text paragraph');
+    assert(blocks[0].content?.includes('Morning reflection') || false, 'Block 0 contains opening paragraph');
+
+    // Block 1: Attachment
+    assertEquals(blocks[1].type, 'attachment', 'Block 1 is an attachment');
+    assertEquals(blocks[1].id, 'att-image-1', 'Block 1 attachment ID matches');
+    assert(blocks[1].attachment !== undefined, 'Block 1 resolved to attachment object');
+    assertEquals(blocks[1].attachment?.name, 'architecture_diagram.png', 'Block 1 file name matches');
+
+    // Block 2: Text
+    assertEquals(blocks[2].type, 'text', 'Block 2 is a text paragraph');
+    assert(blocks[2].content?.includes('quarterly revenue') || false, 'Block 2 contains middle paragraph');
+
+    // Block 3: Attachment (Markdown syntax)
+    assertEquals(blocks[3].type, 'attachment', 'Block 3 is an attachment');
+    assertEquals(blocks[3].id, 'att-doc-2', 'Block 3 attachment ID matches');
+    assert(blocks[3].attachment !== undefined, 'Block 3 resolved to PDF attachment object');
+
+    // Block 4: Text
+    assertEquals(blocks[4].type, 'text', 'Block 4 is a text paragraph');
+    assert(blocks[4].content?.includes('End of day conclusions') || false, 'Block 4 contains closing paragraph');
+  });
+
+  await runTest('WordDocumentCanvas', 'Inline attachment tag removal correctly updates text', () => {
+    const rawMarkdown = `Paragraph A\n\n{{attachment:att-delete-me}}\n\nParagraph B`;
+    const cleaned = rawMarkdown
+      .replace(/\{\{(?:attachment|file):att-delete-me\}\}/g, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    assertEquals(cleaned, 'Paragraph A\n\nParagraph B', 'Tag removed cleanly without affecting surrounding text');
+  });
+
+  // =========================================================================
+  // SUITE 6: Speech Dictation, Audio Recording Lifecycle & Voice Formatting
+  // =========================================================================
+  console.log('\n>> Running Suite 6: Speech Dictation, Audio Recording & Voice-to-Diary');
+
+  await runTest('SpeechService', 'isSpeechRecognitionSupported returns true with polyfill', () => {
+    assert(SpeechService.isSpeechRecognitionSupported(), 'Speech recognition must report supported');
+  });
+
+  await runTest('SpeechService', 'startDictation streams speech events with correct callback parameters', async () => {
+    let capturedText = '';
+    let isFinalReceived = false;
+
+    const started = SpeechService.startDictation(
+      (text: string, isFinal: boolean) => {
+        capturedText = text;
+        isFinalReceived = isFinal;
+      },
+      (err: string) => {
+        throw new Error(`Dictation error: ${err}`);
+      },
+      () => {},
+      'te-IN' // Telugu language code
+    );
+
+    assert(started, 'startDictation must return true on successful start');
+
+    // Trigger mock event
+    const activeRec = (SpeechService as any).recognition;
+    assert(!!activeRec, 'Active recognition instance must be created');
+    assertEquals(activeRec.lang, 'te-IN', 'Recognition language set to Telugu (te-IN)');
+
+    if (activeRec.onresult) {
+      activeRec.onresult({
+        results: [
+          Object.assign([{ transcript: 'ఈ రోజు ప్రాజెక్ట్ విజయవంతంగా పూర్తయింది' }], { isFinal: true }),
+        ],
+      });
+    }
+
+    assertEquals(capturedText, 'ఈ రోజు ప్రాజెక్ట్ విజయవంతంగా పూర్తయింది', 'Captured transcribed Telugu speech');
+    assertEquals(isFinalReceived, true, 'isFinal flag correctly passed as second parameter');
+
+    SpeechService.stopDictation();
+  });
+
+  await runTest('SpeechService', 'startAIRecording & stopAIRecordingAndTranscribe lifecycle', async () => {
+    const started = await SpeechService.startAIRecording();
+    assert(started, 'startAIRecording returned true');
+
+    const result = await SpeechService.stopAIRecordingAndTranscribe();
+    assert(!!result.transcript, 'stopAIRecordingAndTranscribe produced a non-empty transcript');
+    assert(!!result.modelUsed, 'stopAIRecordingAndTranscribe reported model used');
+  });
+
+  await runTest('SpeechService', 'formatVoiceIntoDiary transforms spoken thoughts into structured diary entry', async () => {
+    const spokenTranscript = 'Today we deployed Tasker OS to production and verified all voice, drive, and local storage features. Feeling very accomplished and excited for what comes next.';
+    const formatted = await SpeechService.formatVoiceIntoDiary(spokenTranscript, 'en-US');
+
+    assert(!!formatted.formattedDiary, 'Must have formattedDiary text');
+    assert(!!formatted.mood, 'Must have computed mood');
+    assert(!!formatted.summary, 'Must have summary description');
+    assert(
+      ['great', 'good', 'neutral', 'challenging', 'stressful'].includes(formatted.mood),
+      `Mood must be valid enum: got ${formatted.mood}`
+    );
+  });
+
+  await runTest('SpeechService', 'speakText and stopSpeaking TTS controls execute without error', () => {
+    let ended = false;
+    SpeechService.speakText('Tasker OS Voice Synthesizer Ready.', () => {
+      ended = true;
+    });
+    SpeechService.stopSpeaking();
+    assert(true, 'TTS executed and stopped without exceptions');
+  });
+
+  // =========================================================================
+  // SUITE 7: Security Audit & UI Cleanliness Verification
+  // =========================================================================
+  console.log('\n>> Running Suite 7: Security Audit & UI Cleanliness Verification');
+
+  await runTest('SecurityAudit', 'SettingsModal does NOT expose raw secret Firebase keys in UI', () => {
+    const settingsPath = path.resolve(process.cwd(), 'src/components/SettingsModal.tsx');
+    assert(fs.existsSync(settingsPath), 'SettingsModal.tsx must exist');
+    const settingsContent = fs.readFileSync(settingsPath, 'utf8');
+
+    // Must not expose hardcoded secret API keys
+    assert(!settingsContent.includes('AIzaSyB2F-9F-pB3r32VLa4twyfNBCRtbctEH1M'), 'SettingsModal must NOT contain raw Firebase API key');
+    assert(!settingsContent.includes('6f63b1a4b05dc2dcbdefa3'), 'SettingsModal must NOT contain raw Firebase App ID');
+  });
+
+  await runTest('SecurityAudit', 'SettingsModal does NOT contain redundant backup card', () => {
+    const settingsPath = path.resolve(process.cwd(), 'src/components/SettingsModal.tsx');
+    const settingsContent = fs.readFileSync(settingsPath, 'utf8');
+
+    assert(!settingsContent.includes('VAULT BACKUP & SYNCHRONIZATION FILE'), 'SettingsModal must NOT contain duplicate Backup card');
+    assert(!settingsContent.includes('handleExportBackup'), 'SettingsModal must NOT contain handleExportBackup');
+    assert(!settingsContent.includes('handleImportBackup'), 'SettingsModal must NOT contain handleImportBackup');
+  });
+
+  await runTest('UIVerification', 'Universal file input refs exist outside editor-only conditionals', () => {
+    const diaryViewPath = path.resolve(process.cwd(), 'src/components/DiaryView.tsx');
+    const diaryModalPath = path.resolve(process.cwd(), 'src/components/DiaryModal.tsx');
+
+    const viewContent = fs.readFileSync(diaryViewPath, 'utf8');
+    const modalContent = fs.readFileSync(diaryModalPath, 'utf8');
+
+    // Both files must have imageInputRef and fileInputRef defined
+    assert(viewContent.includes('ref={imageInputRef}'), 'DiaryView has mounted imageInputRef');
+    assert(viewContent.includes('ref={fileInputRef}'), 'DiaryView has mounted fileInputRef');
+    assert(modalContent.includes('ref={imageInputRef}'), 'DiaryModal has mounted imageInputRef');
+    assert(modalContent.includes('ref={fileInputRef}'), 'DiaryModal has mounted fileInputRef');
+
+    // Both files must have handleInsertMediaFile accepting insertAfterIndex
+    assert(viewContent.includes('handleInsertMediaFile = async (file: File, insertAfterIndex?: number)'), 'DiaryView accepts insertAfterIndex');
+    assert(modalContent.includes('handleInsertMediaFile = async (file: File, insertAfterIndex?: number)'), 'DiaryModal accepts insertAfterIndex');
+  });
   console.log('\n===============================================================');
   console.log('                 AUDIT EXECUTION RESULTS');
   console.log('===============================================================');

@@ -33,7 +33,7 @@ import { GoogleAuthService } from '../services/googleAuthService';
 import { DiaryAIChatModal } from './DiaryAIChatModal';
 import { DiaryAIModelSelector } from './DiaryAIModelSelector';
 import { DriveMediaViewerModal } from './DriveMediaViewerModal';
-import { WordDocumentCanvas } from './WordDocumentCanvas';
+import { WordDocumentCanvas, parseDocumentContent } from './WordDocumentCanvas';
 
 interface DiaryModalProps {
   date: string; // YYYY-MM-DD
@@ -207,14 +207,29 @@ export const DiaryModal: React.FC<DiaryModalProps> = ({
   };
 
   // --- 📎 FILE UPLOAD WITH SHA-256 DEDUPLICATION & INLINE INSERTION ---
-  const handleInsertMediaFile = async (file: File) => {
+  const handleInsertMediaFile = async (file: File, insertAfterIndex?: number) => {
     try {
       const { attachment, isDuplicate } = await StorageService.processAndDeduplicateFile(file, date);
       
       let newContent = entry.content;
       const marker = `\n\n{{attachment:${attachment.id}}}\n\n`;
 
-      if (textareaRef.current) {
+      if (insertAfterIndex !== undefined && insertAfterIndex !== null) {
+        const blocks = parseDocumentContent(entry.content, entry.attachments);
+        if (insertAfterIndex >= 0 && insertAfterIndex < blocks.length) {
+          const beforeBlocks = blocks.slice(0, insertAfterIndex + 1);
+          const afterBlocks = blocks.slice(insertAfterIndex + 1);
+          const beforeStr = beforeBlocks
+            .map((b) => (b.type === 'text' ? b.content || '' : b.originalTag || `{{attachment:${b.id}}}`))
+            .join('');
+          const afterStr = afterBlocks
+            .map((b) => (b.type === 'text' ? b.content || '' : b.originalTag || `{{attachment:${b.id}}}`))
+            .join('');
+          newContent = `${beforeStr.trimEnd()}${marker}${afterStr.trimStart()}`;
+        } else {
+          newContent = `${entry.content.trimEnd()}${marker}`;
+        }
+      } else if (textareaRef.current) {
         const { selectionStart, selectionEnd } = textareaRef.current;
         if (selectionStart !== undefined && selectionStart >= 0) {
           const before = entry.content.substring(0, selectionStart);
@@ -598,10 +613,16 @@ ${entry.content}`;
               accept="image/*"
               className="hidden"
             />
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileUpload}
+              className="hidden"
+            />
             <button
               type="button"
               onClick={() => imageInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950 hover:bg-slate-800 text-indigo-300 border border-slate-800 text-xs font-semibold transition"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950 hover:bg-slate-800 text-indigo-300 border border-slate-800 text-xs font-semibold transition cursor-pointer"
               title="Upload and insert an image inline at cursor"
             >
               <ImageIcon className="w-3 h-3 text-indigo-400" />
