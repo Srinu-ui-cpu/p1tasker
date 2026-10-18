@@ -7,7 +7,9 @@ import {
   User, 
   ShieldCheck, 
   Loader2,
-  ArrowLeft
+  ArrowLeft,
+  XCircle,
+  Sparkles
 } from 'lucide-react';
 import { GoogleAuthService } from '../services/googleAuthService';
 import { FirebaseAuthService } from '../services/firebaseAuthService';
@@ -25,7 +27,13 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGooglePopupActive, setIsGooglePopupActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [showEmailFallback, setShowEmailFallback] = useState(false);
+
+  // Cancel any ongoing popup wait
+  const handleCancelPopup = () => {
+    setIsSubmitting(false);
+    setIsGooglePopupActive(false);
+    setErrorMessage('Google Sign-In was cancelled. You can enter your Google email below for instant access.');
+  };
 
   // --- Official Firebase Google Sign-In Flow ---
   const handleGoogleSignIn = async () => {
@@ -40,7 +48,6 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
         localStorage.removeItem('tasker_remember_me');
       }
 
-      // Firebase handles authentication and Google Drive scopes in a single popup
       await FirebaseAuthService.signInWithGoogle();
       
       setIsSubmitting(false);
@@ -51,11 +58,11 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
       setIsSubmitting(false);
       setIsGooglePopupActive(false);
       console.error('Sign-in error:', error);
-      setErrorMessage(error.message || 'Google Sign-In was cancelled or failed. Please try again.');
+      setErrorMessage(error.message || 'Google Sign-In was cancelled or timed out. Please try direct email entry below.');
     }
   };
 
-  // --- Direct Email Vault Fallback ---
+  // --- Direct Email Vault Flow (Instant Access) ---
   const handleEmailSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = emailInput.trim().toLowerCase();
@@ -89,14 +96,14 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-center items-center p-4 relative overflow-hidden font-sans selection:bg-indigo-500 selection:text-white">
-      {/* Subtle Ambient Background Glows */}
+      {/* Background Ambient Glows */}
       <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-indigo-600/15 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-600/15 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Main Clean Card */}
+      {/* Main Login Card */}
       <div className="max-w-md w-full bg-slate-900/90 border border-slate-800 backdrop-blur-2xl rounded-3xl p-6 sm:p-8 shadow-2xl z-10 space-y-6">
         
-        {/* Top Back to Home Button */}
+        {/* Back to Home Navigation */}
         {onBack && (
           <button
             type="button"
@@ -162,13 +169,13 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
           </div>
         )}
 
-        {/* PRIMARY GOOGLE AUTH BUTTON */}
-        <div className="space-y-4">
+        {/* PRIMARY ACTION 1: GOOGLE ONE-CLICK SIGN IN */}
+        <div className="space-y-3">
           <button
             type="button"
             onClick={handleGoogleSignIn}
             disabled={isSubmitting}
-            className="w-full py-4 px-4 bg-white hover:bg-slate-100 active:scale-[0.99] text-slate-900 font-bold text-sm sm:text-base rounded-2xl flex items-center justify-center gap-3 transition shadow-xl shadow-white/10 border border-slate-200 group relative overflow-hidden"
+            className="w-full py-3.5 px-4 bg-white hover:bg-slate-100 active:scale-[0.99] text-slate-900 font-bold text-sm sm:text-base rounded-2xl flex items-center justify-center gap-3 transition shadow-xl shadow-white/10 border border-slate-200 group relative overflow-hidden"
           >
             {isGooglePopupActive ? (
               <>
@@ -191,85 +198,101 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
             )}
           </button>
 
-          {/* Clean Single-Screen Permission Notice */}
+          {/* Cancel button if popup is taking time */}
+          {isGooglePopupActive && (
+            <button
+              type="button"
+              onClick={handleCancelPopup}
+              className="w-full py-1.5 text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center justify-center gap-1 transition"
+            >
+              <XCircle className="w-3.5 h-3.5" />
+              <span>Cancel or taking too long? Click here</span>
+            </button>
+          )}
+
+          {/* Clean Drive Scope Notice */}
           <div className="p-3 bg-slate-950/60 rounded-2xl border border-slate-800 text-[11px] text-slate-300 flex items-start gap-2">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <p className="leading-relaxed">
-              Google will ask permission to create and sync your private <strong className="text-white">Tasker App Data</strong> folder. 
-              Your existing Google Drive files are never accessed or shared.
+              Google will sync your private <strong className="text-white">📁 Tasker App Data</strong> folder. Your personal files outside this folder are never accessed.
             </p>
-          </div>
-
-          {/* Remember Me Checkbox */}
-          <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={rememberMe}
-                onChange={(e) => setRememberMe(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer"
-              />
-              <span>Remember my session</span>
-            </label>
-            <span className="text-[10px] text-emerald-400 font-medium">Auto-Sync Enabled</span>
           </div>
         </div>
 
-        {/* Minimal Email Fallback (Clean Accordion) */}
-        <div className="pt-2 border-t border-slate-800/80">
-          <button
-            type="button"
-            onClick={() => setShowEmailFallback(!showEmailFallback)}
-            className="w-full text-center text-xs text-slate-400 hover:text-slate-200 transition py-1 flex items-center justify-center gap-1.5"
-          >
-            <Mail className="w-3.5 h-3.5 text-slate-500" />
-            <span>{showEmailFallback ? 'Hide email entry' : 'Or continue with email'}</span>
-          </button>
+        {/* DIVIDER */}
+        <div className="relative flex items-center justify-center">
+          <div className="border-t border-slate-800 w-full" />
+          <span className="bg-slate-900 px-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold absolute">
+            Or sign in directly with email
+          </span>
+        </div>
 
-          {showEmailFallback && (
-            <form onSubmit={handleEmailSubmit} className="mt-3 p-3.5 bg-slate-950 rounded-2xl border border-slate-800 space-y-3 animate-fade-in">
-              <div className="space-y-1">
-                <input
-                  type="email"
-                  required
-                  placeholder="name@gmail.com"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition font-mono"
-                />
-              </div>
+        {/* PRIMARY ACTION 2: DIRECT GOOGLE EMAIL ENTRY (INSTANT ACCESS) */}
+        <form onSubmit={handleEmailSubmit} className="space-y-3">
+          <div className="space-y-1">
+            <label className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+              <Mail className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Google Account / Gmail Address</span>
+            </label>
+            <input
+              type="email"
+              required
+              placeholder="e.g. smnsreddy01@gmail.com"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none transition font-mono"
+            />
+          </div>
 
-              {authMode === 'signup' && (
-                <div className="space-y-1">
-                  <input
-                    type="text"
-                    placeholder="Your Name (Optional)"
-                    value={nameInput}
-                    onChange={(e) => setNameInput(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition"
-                  />
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSubmitting || !emailInput.trim()}
-                className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold transition"
-              >
-                Continue with Email
-              </button>
-            </form>
+          {authMode === 'signup' && (
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Your Name (Optional)</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Srinivas Reddy"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none transition"
+              />
+            </div>
           )}
+
+          <button
+            type="submit"
+            disabled={isSubmitting || !emailInput.trim()}
+            className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Enter Personal Cloud Vault (Instant)</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </form>
+
+        {/* Remember Me Checkbox */}
+        <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+            />
+            <span>Remember session on this device</span>
+          </label>
+          <span className="text-[10px] text-emerald-400 font-medium">Auto-Sync Enabled</span>
         </div>
 
         {/* Footer Links */}
-        <div className="pt-1 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-800/60">
+        <div className="pt-2 flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-800/60">
           <div className="flex items-center gap-2">
             <a href="/privacy" target="_blank" rel="noreferrer" className="hover:text-slate-300 underline">Privacy Policy</a>
             <span>•</span>
             <a href="/terms" target="_blank" rel="noreferrer" className="hover:text-slate-300 underline">Terms of Service</a>
           </div>
-          <span className="text-slate-400 font-mono">v2.1 Production</span>
+          <span className="text-slate-400 font-mono">v2.2 Production</span>
         </div>
 
       </div>

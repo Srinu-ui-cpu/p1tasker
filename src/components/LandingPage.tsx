@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   CheckSquare, 
   Cloud, 
@@ -15,9 +15,15 @@ import {
   Brain,
   Layers,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  Shield,
+  Clock,
+  Image as ImageIcon,
+  Key,
+  HardDrive,
+  Users,
+  Check
 } from 'lucide-react';
-import { CartoonGirlClicker } from './CartoonGirlClicker';
 
 interface LandingPageProps {
   onGetStarted: () => void;
@@ -25,16 +31,18 @@ interface LandingPageProps {
 }
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onSignIn }) => {
+  const [activeFeatureTab, setActiveFeatureTab] = useState<'drive' | 'calendar' | 'ai' | 'diary'>('drive');
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white relative overflow-x-hidden">
       
       {/* Background Radial Glow Effects */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] sm:w-[1000px] h-[500px] bg-gradient-to-b from-indigo-600/15 via-purple-600/10 to-transparent blur-3xl pointer-events-none" />
-      <div className="absolute top-[40%] right-[-10%] w-[400px] h-[400px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute top-[70%] left-[-10%] w-[400px] h-[400px] bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] sm:w-[1100px] h-[550px] bg-gradient-to-b from-indigo-600/15 via-purple-600/10 to-transparent blur-3xl pointer-events-none" />
+      <div className="absolute top-[35%] right-[-10%] w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-[65%] left-[-10%] w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
 
       {/* Modern Sticky Navigation */}
-      <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/80 px-4 sm:px-8 py-3.5">
+      <header className="sticky top-0 z-40 bg-slate-950/85 backdrop-blur-xl border-b border-slate-800/80 px-4 sm:px-8 py-3.5">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           
           {/* Logo */}
@@ -50,12 +58,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onSignIn
             </div>
           </div>
 
-          {/* Nav Links */}
-          <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-300">
+          {/* Navigation Links */}
+          <nav className="hidden md:flex items-center gap-7 text-sm font-medium text-slate-300">
+            <a href="#overview" className="hover:text-white transition">Overview</a>
+            <a href="#how-it-works" className="hover:text-white transition">How It Works</a>
             <a href="#features" className="hover:text-white transition">Features</a>
-            <a href="#drive-vault" className="hover:text-white transition">Google Drive Vault</a>
-            <a href="#ai-brain" className="hover:text-white transition">AI Second Brain</a>
-            <a href="#security" className="hover:text-white transition">Security & Privacy</a>
+            <a href="#comparison" className="hover:text-white transition">Why Tasker</a>
           </nav>
 
           {/* Action CTAs */}
@@ -68,7 +76,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onSignIn
             </button>
             <button
               onClick={onGetStarted}
-              className="px-4 sm:px-5 py-2 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center gap-1.5"
+              className="px-4 sm:px-5 py-2.5 text-xs sm:text-sm font-bold bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center gap-1.5"
             >
               <span>Get Started</span>
               <ArrowRight className="w-3.5 h-3.5" />
@@ -79,304 +87,401 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onSignIn
       </header>
 
       {/* HERO SECTION */}
-      <section className="relative pt-12 sm:pt-20 pb-16 sm:pb-24 px-4 sm:px-8 max-w-7xl mx-auto text-center flex flex-col items-center">
+      <section id="overview" className="relative pt-16 sm:pt-24 pb-16 sm:pb-24 px-4 sm:px-8 max-w-6xl mx-auto text-center flex flex-col items-center">
         
-        {/* Top Floating Pill */}
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-indigo-500/30 text-indigo-300 text-xs font-semibold shadow-lg shadow-indigo-500/10 mb-6 animate-pulse">
-          <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-          <span>New: Universal Firebase Google Sign-In & Direct Drive Vault</span>
+        {/* Top Floating Badge */}
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-slate-900/90 border border-indigo-500/30 text-indigo-300 text-xs font-semibold shadow-lg shadow-indigo-500/10 mb-6">
+          <Sparkles className="w-4 h-4 text-indigo-400" />
+          <span>The Autonomous Productivity OS & Personal Cloud Vault</span>
         </div>
 
-        {/* Big Bold Headline */}
-        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white max-w-4xl leading-[1.12]">
-          Master Your Time. <br className="hidden sm:inline" />
+        {/* Big Impact Headline */}
+        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white max-w-5xl leading-[1.12]">
+          Organize Your Life. <br className="hidden sm:inline" />
           <span className="bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-            Own Your Data.
+            Store In Your Own Google Drive.
           </span>
         </h1>
 
-        {/* Subtitle */}
-        <p className="mt-5 text-base sm:text-xl text-slate-300 max-w-2xl leading-relaxed">
-          The autonomous productivity operating system for your tasks, daily schedule, thoughts, and diary. 
-          Synchronized directly to your <strong>personal Google Drive</strong> with zero third-party storage.
+        {/* Clear, Engaging Subtitle */}
+        <p className="mt-6 text-base sm:text-xl text-slate-300 max-w-3xl leading-relaxed">
+          Tasker OS combines interactive calendar scheduling, smart task management, encrypted journaling, 
+          and AI intelligence into one cohesive workstation. All your data is saved straight into 
+          your personal Google Drive — <strong>never stored on third-party servers</strong>.
         </p>
 
-        {/* THE CARTOON GIRL & "GET STARTED" INTERACTION */}
-        <div className="mt-4 sm:mt-6">
-          <CartoonGirlClicker 
+        {/* Primary CTA Buttons */}
+        <div className="mt-9 flex flex-col sm:flex-row items-center justify-center gap-4 w-full max-w-md">
+          <button
             onClick={onGetStarted}
-            buttonText="Get Started with Google"
-            subText="Instant 1-click Google Sign-In • Automatic Google Drive Sync • 100% Free"
-          />
+            className="w-full sm:w-auto flex-1 py-4 px-8 bg-gradient-to-r from-indigo-600 via-indigo-500 to-purple-600 hover:from-indigo-500 hover:to-purple-500 active:scale-[0.98] text-white font-extrabold text-base rounded-2xl shadow-xl shadow-indigo-500/30 hover:shadow-indigo-500/50 border border-indigo-400/30 flex items-center justify-center gap-3 transition group"
+          >
+            <span>Launch Tasker OS</span>
+            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+          </button>
+
+          <button
+            onClick={onSignIn}
+            className="w-full sm:w-auto py-4 px-6 bg-slate-900 hover:bg-slate-800 text-slate-200 hover:text-white text-sm font-semibold rounded-2xl border border-slate-800 transition flex items-center justify-center gap-2"
+          >
+            <span>Sign In to Vault</span>
+          </button>
         </div>
 
-        {/* Trust & Spec Badges */}
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-4 sm:gap-8 text-xs sm:text-sm text-slate-400">
+        {/* Trust Badges */}
+        <div className="mt-8 flex flex-wrap items-center justify-center gap-6 sm:gap-10 text-xs sm:text-sm text-slate-400">
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>No Credit Card Required</span>
+            <span>100% Free to Use</span>
           </div>
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>Personal Google Drive Vault</span>
+            <span>Personal Google Drive Storage</span>
           </div>
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>Zero Third-Party Data Tracking</span>
+            <span>Zero Third-Party Tracking</span>
           </div>
         </div>
 
       </section>
 
-      {/* LIVE INTERACTIVE PRODUCT MOCKUP PREVIEW */}
-      <section className="px-4 sm:px-8 max-w-6xl mx-auto -mt-4 pb-20 w-full">
-        <div className="relative rounded-3xl bg-slate-900/90 border border-slate-800 p-2 sm:p-4 shadow-2xl shadow-indigo-500/10 backdrop-blur-xl">
-          {/* Top Mockup Window Header */}
-          <div className="flex items-center justify-between pb-3 px-3 border-b border-slate-800/80">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-rose-500/80" />
-              <span className="w-3 h-3 rounded-full bg-amber-500/80" />
-              <span className="w-3 h-3 rounded-full bg-emerald-500/80" />
-              <span className="ml-3 text-xs font-mono text-slate-400">tasker-os.cloud // live-workspace</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-emerald-400 bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-800/60 font-semibold">
-              <Cloud className="w-3.5 h-3.5" />
-              <span>Google Drive Connected</span>
-            </div>
-          </div>
-
-          {/* Mockup Dashboard Preview Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-4 text-left">
-            
-            {/* Column 1: Calendar & Timeline */}
-            <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-white flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-indigo-400" />
-                  <span>Interactive Day Planner</span>
-                </span>
-                <span className="text-[10px] text-slate-400">Today</span>
-              </div>
-              <div className="space-y-2 text-xs">
-                <div className="p-2.5 rounded-xl bg-indigo-950/50 border border-indigo-800/50 flex items-center justify-between">
-                  <span className="font-medium text-indigo-200">Deep Work: Architecture Design</span>
-                  <span className="text-[10px] text-indigo-400 font-mono">09:00 AM</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-slate-300">
-                  <span>Sprint Alignment & Roadmap</span>
-                  <span className="text-[10px] text-slate-400 font-mono">02:00 PM</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between text-slate-300">
-                  <span>Evening Journal & Reflection</span>
-                  <span className="text-[10px] text-slate-400 font-mono">07:30 PM</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Column 2: Personal Google Drive Vault */}
-            <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-white flex items-center gap-1.5">
-                  <FolderHeart className="w-4 h-4 text-emerald-400" />
-                  <span>Google Drive Vault</span>
-                </span>
-                <span className="text-[10px] text-emerald-400 font-mono">📁 /Tasker App Data</span>
-              </div>
-              <div className="space-y-2 text-xs">
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckSquare className="w-3.5 h-3.5 text-emerald-400" />
-                    <span className="text-slate-200 font-medium">tasks-sync.json</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">Auto-saved</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <BookOpen className="w-3.5 h-3.5 text-purple-400" />
-                    <span className="text-slate-200 font-medium">diary-entries.json</span>
-                  </div>
-                  <span className="text-[10px] text-slate-400">Encrypted</span>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-                    <span className="text-slate-200 font-medium">backup-vault.tasker</span>
-                  </div>
-                  <span className="text-[10px] text-emerald-400">Verified</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Column 3: Omni-AI Second Brain */}
-            <div className="p-4 rounded-2xl bg-slate-950/80 border border-slate-800/80 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-white flex items-center gap-1.5">
-                  <Brain className="w-4 h-4 text-purple-400" />
-                  <span>Omni-AI Second Brain</span>
-                </span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-950 text-purple-300 border border-purple-800">
-                  Gemini &bull; Groq &bull; Grok
-                </span>
-              </div>
-              <div className="p-3 rounded-xl bg-purple-950/30 border border-purple-800/40 text-xs space-y-1.5">
-                <span className="text-slate-400 text-[10px] block">AI Copilot Analysis:</span>
-                <p className="text-purple-200 leading-relaxed text-[11px]">
-                  "You have 3 high-impact tasks scheduled today. Would you like me to outline subtasks for the architecture review?"
-                </p>
-                <div className="flex gap-2 pt-1">
-                  <span className="px-2 py-0.5 bg-purple-900/60 rounded text-[10px] text-purple-300 font-medium">Auto-prioritize</span>
-                  <span className="px-2 py-0.5 bg-purple-900/60 rounded text-[10px] text-purple-300 font-medium">Summarize day</span>
-                </div>
-              </div>
-            </div>
-
-          </div>
-        </div>
-      </section>
-
-      {/* CORE FEATURES GRID */}
-      <section id="features" className="py-16 sm:py-24 px-4 sm:px-8 max-w-7xl mx-auto w-full">
+      {/* INTERACTIVE FEATURE SHOWCASE WITH TABS */}
+      <section className="px-4 sm:px-8 max-w-6xl mx-auto pb-24 w-full">
         
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-xs uppercase tracking-widest text-indigo-400 font-bold mb-2">Engineered For Focus</h2>
-          <h3 className="text-3xl sm:text-4xl font-extrabold text-white">Everything You Need In One Cohesive OS</h3>
-          <p className="mt-3 text-slate-400 text-sm sm:text-base">
-            Replace dozens of disconnected apps with a single, ultra-fast workspace tailored to your personal life and career.
-          </p>
+        {/* Interactive Tab Switcher */}
+        <div className="p-1.5 bg-slate-900/90 rounded-2xl border border-slate-800 max-w-2xl mx-auto flex items-center gap-1 mb-8 shadow-xl">
+          <button
+            onClick={() => setActiveFeatureTab('drive')}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 ${
+              activeFeatureTab === 'drive'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Cloud className="w-4 h-4 text-emerald-400" />
+            <span>Drive Vault</span>
+          </button>
+
+          <button
+            onClick={() => setActiveFeatureTab('calendar')}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 ${
+              activeFeatureTab === 'calendar'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Calendar className="w-4 h-4 text-indigo-300" />
+            <span>Calendar</span>
+          </button>
+
+          <button
+            onClick={() => setActiveFeatureTab('ai')}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 ${
+              activeFeatureTab === 'ai'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Brain className="w-4 h-4 text-purple-300" />
+            <span>AI Brain</span>
+          </button>
+
+          <button
+            onClick={() => setActiveFeatureTab('diary')}
+            className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 ${
+              activeFeatureTab === 'diary'
+                ? 'bg-indigo-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BookOpen className="w-4 h-4 text-pink-300" />
+            <span>Diary</span>
+          </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Feature Interactive Card Content */}
+        <div className="rounded-3xl bg-slate-900/90 border border-slate-800 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
           
-          {/* Card 1 */}
-          <div id="drive-vault" className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-950/80 text-emerald-400 border border-emerald-800/60 flex items-center justify-center">
-              <Cloud className="w-6 h-6" />
-            </div>
-            <h4 className="text-lg font-bold text-white">Personal Google Drive Cloud Vault</h4>
-            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-              Your tasks, journals, and files are saved directly into a clean <code>Tasker App Data</code> folder in your own Google Drive. No mystery servers, no monthly storage upsells.
-            </p>
-            <div className="pt-2 flex items-center gap-1.5 text-xs text-emerald-400 font-semibold">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Full user data sovereignty</span>
-            </div>
-          </div>
+          {activeFeatureTab === 'drive' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center animate-fade-in">
+              <div className="space-y-4 text-left">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-950/80 border border-emerald-800 text-emerald-300 text-xs font-semibold">
+                  <Cloud className="w-3.5 h-3.5" />
+                  <span>Personal Google Drive Cloud Vault</span>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold text-white">
+                  Your Data Stays With You. In Your Drive.
+                </h3>
+                <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
+                  Unlike conventional productivity apps that keep your files on their servers, Tasker OS writes directly to a visible folder in your personal Google Drive called:
+                </p>
+                <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 font-mono text-emerald-400 text-xs flex items-center justify-between">
+                  <span>📁 Google Drive &gt; Tasker App Data</span>
+                  <span className="text-slate-500 text-[10px]">Auto-Synced</span>
+                </div>
+                <ul className="space-y-2 text-xs sm:text-sm text-slate-300 pt-2">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Never pay subscription storage fees</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Access tasks and backup files in standard, human-readable JSON</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Complete privacy: No tracking, no ads, no telemetry</span>
+                  </li>
+                </ul>
+              </div>
 
-          {/* Card 2 */}
-          <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-950/80 text-indigo-400 border border-indigo-800/60 flex items-center justify-center">
-              <Calendar className="w-6 h-6" />
+              {/* Visual Diagram Box */}
+              <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 space-y-4">
+                <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-800 pb-3">
+                  <span className="font-bold text-white flex items-center gap-1.5">
+                    <HardDrive className="w-4 h-4 text-emerald-400" />
+                    <span>Cloud Sync Architecture</span>
+                  </span>
+                  <span className="text-emerald-400 font-mono">Live Sync</span>
+                </div>
+                <div className="space-y-2.5 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckSquare className="w-4 h-4 text-indigo-400" />
+                      <span className="text-slate-200 font-mono">tasks-sync.json</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded">Synced</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <BookOpen className="w-4 h-4 text-pink-400" />
+                      <span className="text-slate-200 font-mono">diary-entries.json</span>
+                    </div>
+                    <span className="text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded">Synced</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-purple-400" />
+                      <span className="text-slate-200 font-mono">attachments/</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 font-mono">Deduplicated</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <h4 className="text-lg font-bold text-white">Interactive Calendar & Workspace</h4>
-            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-              Plan by month, week, or day. Click any date to immediately launch into that day's dedicated task management, time block scheduler, and notes.
-            </p>
-            <div className="pt-2 flex items-center gap-1.5 text-xs text-indigo-400 font-semibold">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Instant date switching & time blocking</span>
-            </div>
-          </div>
+          )}
 
-          {/* Card 3 */}
-          <div id="ai-brain" className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-purple-950/80 text-purple-400 border border-purple-800/60 flex items-center justify-center">
-              <Brain className="w-6 h-6" />
-            </div>
-            <h4 className="text-lg font-bold text-white">Omni-AI Second Brain</h4>
-            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-              Supercharged with Gemini, Groq, xAI Grok 2, and OpenAI. Analyze lengthy texts, proofread notes, and summarize your daily schedule with a single prompt.
-            </p>
-            <div className="pt-2 flex items-center gap-1.5 text-xs text-purple-400 font-semibold">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Multi-provider routing & live scanning</span>
-            </div>
-          </div>
+          {activeFeatureTab === 'calendar' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center animate-fade-in">
+              <div className="space-y-4 text-left">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-950/80 border border-indigo-800 text-indigo-300 text-xs font-semibold">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Interactive Calendar & Day Workspace</span>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold text-white">
+                  Effortless Time-Blocking & Daily Focus
+                </h3>
+                <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
+                  Start every morning with clarity. Tasker OS presents your month, week, and day at a glance. Click any date on the calendar to open that day's dedicated task board and schedule.
+                </p>
+                <ul className="space-y-2 text-xs sm:text-sm text-slate-300 pt-2">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                    <span>Quick day-stepper to review past notes or plan future sprints</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                    <span>Category tags, priorities, checklist subtasks, and progress indicators</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-indigo-400 shrink-0" />
+                    <span>Instant full-text global search across all dates</span>
+                  </li>
+                </ul>
+              </div>
 
-          {/* Card 4 */}
-          <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-pink-950/80 text-pink-400 border border-pink-800/60 flex items-center justify-center">
-              <BookOpen className="w-6 h-6" />
+              <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <span className="text-xs font-bold text-white block">Day Planner Preview</span>
+                <div className="space-y-2 text-xs">
+                  <div className="p-3 bg-indigo-950/40 border border-indigo-800/50 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="font-semibold text-white block">Sprint Alignment & Standup</span>
+                      <span className="text-[10px] text-indigo-300">High Priority &bull; Work</span>
+                    </div>
+                    <span className="text-[11px] font-mono text-indigo-400">09:30 AM</span>
+                  </div>
+                  <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl flex items-center justify-between">
+                    <div>
+                      <span className="font-semibold text-slate-200 block">Deep Work Session: Architecture</span>
+                      <span className="text-[10px] text-slate-400">Focus Block</span>
+                    </div>
+                    <span className="text-[11px] font-mono text-slate-400">02:00 PM</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <h4 className="text-lg font-bold text-white">Encrypted Diary & Media Attachments</h4>
-            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-              Capture your deepest reflections with rich text editing. Attach photos with client-side canvas compression and SHA-256 deduplication for lightweight syncing.
-            </p>
-            <div className="pt-2 flex items-center gap-1.5 text-xs text-pink-400 font-semibold">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Smart compression & zero duplicate files</span>
-            </div>
-          </div>
+          )}
 
-          {/* Card 5 */}
-          <div className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-amber-950/80 text-amber-400 border border-amber-800/60 flex items-center justify-center">
-              <Bell className="w-6 h-6" />
-            </div>
-            <h4 className="text-lg font-bold text-white">Proactive Alarms & Audio Alerts</h4>
-            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-              Never miss a critical milestone. Built-in background alarm loop with audio chimes and interactive alert dialogs to keep you punctually on track.
-            </p>
-            <div className="pt-2 flex items-center gap-1.5 text-xs text-amber-400 font-semibold">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Audible alarms with repeat schedules</span>
-            </div>
-          </div>
+          {activeFeatureTab === 'ai' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center animate-fade-in">
+              <div className="space-y-4 text-left">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-950/80 border border-purple-800 text-purple-300 text-xs font-semibold">
+                  <Brain className="w-3.5 h-3.5" />
+                  <span>Omni-AI Second Brain</span>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold text-white">
+                  Multi-Model Intelligence On Demand
+                </h3>
+                <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
+                  Connect leading language models including Google Gemini, Groq (Llama 3), xAI Grok 2, and OpenAI. Analyze long notes, draft agendas, and summarize your daily progress with zero friction.
+                </p>
+                <ul className="space-y-2 text-xs sm:text-sm text-slate-300 pt-2">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span>Dynamic model scanner that automatically finds active models</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span>Built-in semantic question analysis & proofreading engine</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-purple-400 shrink-0" />
+                    <span>Encrypted AI keys stored directly in your Google Drive</span>
+                  </li>
+                </ul>
+              </div>
 
-          {/* Card 6 */}
-          <div id="security" className="p-6 rounded-3xl bg-slate-900/80 border border-slate-800 hover:border-slate-700 transition space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-cyan-950/80 text-cyan-400 border border-cyan-800/60 flex items-center justify-center">
-              <Lock className="w-6 h-6" />
+              <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <span className="text-xs font-bold text-white">Omni-AI Assistant</span>
+                  <span className="text-[10px] bg-purple-900/60 text-purple-300 px-2 py-0.5 rounded font-mono">Gemini 1.5 Flash</span>
+                </div>
+                <div className="p-3 bg-purple-950/30 border border-purple-800/40 rounded-xl text-xs space-y-2">
+                  <p className="text-slate-300 text-[11px] leading-relaxed">
+                    "I analyzed your tasks for today. You have 3 critical deadlines before 3 PM. Would you like me to reschedule non-urgent tasks to tomorrow?"
+                  </p>
+                  <div className="flex gap-2">
+                    <span className="px-2 py-0.5 bg-purple-900/60 rounded text-[10px] text-purple-300 font-medium">Auto-Optimize</span>
+                    <span className="px-2 py-0.5 bg-purple-900/60 rounded text-[10px] text-purple-300 font-medium">Generate Summary</span>
+                  </div>
+                </div>
+              </div>
             </div>
-            <h4 className="text-lg font-bold text-white">AES-256 Client-Side Encryption</h4>
-            <p className="text-xs sm:text-sm text-slate-400 leading-relaxed">
-              Export password-protected encrypted `.taskerbackup` vaults. Migrate across devices seamlessly without exposing your unencrypted data to anyone.
-            </p>
-            <div className="pt-2 flex items-center gap-1.5 text-xs text-cyan-400 font-semibold">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>Military-grade AES-GCM vault security</span>
+          )}
+
+          {activeFeatureTab === 'diary' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center animate-fade-in">
+              <div className="space-y-4 text-left">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-pink-950/80 border border-pink-800 text-pink-300 text-xs font-semibold">
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Encrypted Daily Journal</span>
+                </div>
+                <h3 className="text-2xl sm:text-3xl font-extrabold text-white">
+                  Private Journaling with Media Uploads
+                </h3>
+                <p className="text-slate-300 text-sm sm:text-base leading-relaxed">
+                  Capture your thoughts, ideas, and memories. Features a clean rich text editor with lightweight client-side photo compression and SHA-256 deduplication to prevent bloated backups.
+                </p>
+                <ul className="space-y-2 text-xs sm:text-sm text-slate-300 pt-2">
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-pink-400 shrink-0" />
+                    <span>Client-side canvas image thumbnail compression</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-pink-400 shrink-0" />
+                    <span>Automatic SHA-256 deduplication saves Google Drive storage</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-pink-400 shrink-0" />
+                    <span>AES-256-GCM encryption for complete confidentiality</span>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="p-6 bg-slate-950 rounded-2xl border border-slate-800 space-y-3">
+                <span className="text-xs font-bold text-white block">Journal Entry Preview</span>
+                <div className="p-3 bg-slate-900 border border-slate-800 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-slate-400 text-[10px]">
+                    <span>Today &bull; 08:45 PM</span>
+                    <span className="text-pink-400">Reflective</span>
+                  </div>
+                  <p className="text-slate-300 text-[11px] leading-relaxed italic">
+                    "Shipped the new architecture milestone today. The team alignment felt natural and the focus time block really helped clear distractions..."
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
 
         </div>
 
       </section>
 
-      {/* HOW IT WORKS SECTION */}
-      <section className="py-16 sm:py-20 px-4 sm:px-8 bg-slate-900/40 border-y border-slate-800/80 w-full">
-        <div className="max-w-5xl mx-auto text-center space-y-12">
+      {/* WHY TASKER OS COMPARISON SECTION */}
+      <section id="comparison" className="py-20 px-4 sm:px-8 bg-slate-900/40 border-y border-slate-800/80 w-full">
+        <div className="max-w-5xl mx-auto space-y-12 text-center">
           
           <div>
-            <h2 className="text-xs uppercase tracking-widest text-indigo-400 font-bold mb-2">Seamless 3-Step Setup</h2>
-            <h3 className="text-2xl sm:text-3xl font-extrabold text-white">Get Started in Under 30 Seconds</h3>
+            <h2 className="text-xs uppercase tracking-widest text-indigo-400 font-bold mb-2">The Difference</h2>
+            <h3 className="text-3xl sm:text-4xl font-extrabold text-white">Why Productive Minds Choose Tasker OS</h3>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
             
-            <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 relative">
-              <span className="text-4xl font-extrabold text-indigo-500/30 absolute top-4 right-4">01</span>
-              <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm mb-4">1</div>
-              <h4 className="font-bold text-base text-white mb-2">Click "Get Started"</h4>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Choose either Sign In or Create Account. We use official Firebase Google Authentication for seamless identity verification.
-              </p>
+            {/* Traditional Apps */}
+            <div className="p-6 sm:p-8 rounded-3xl bg-slate-950/70 border border-slate-800 space-y-4">
+              <span className="text-xs font-bold uppercase tracking-wider text-rose-400 block">
+                Traditional Productivity SaaS
+              </span>
+              <ul className="space-y-3 text-xs sm:text-sm text-slate-400">
+                <li className="flex items-start gap-2.5">
+                  <span className="text-rose-500 font-bold text-base leading-none">✕</span>
+                  <span>Your notes and tasks sit on their closed servers</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-rose-500 font-bold text-base leading-none">✕</span>
+                  <span>High monthly subscriptions for storage you already have</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-rose-500 font-bold text-base leading-none">✕</span>
+                  <span>Proprietary database formats make export painful</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <span className="text-rose-500 font-bold text-base leading-none">✕</span>
+                  <span>Data tracking, tracking cookies, and user analytics</span>
+                </li>
+              </ul>
             </div>
 
-            <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 relative">
-              <span className="text-4xl font-extrabold text-indigo-500/30 absolute top-4 right-4">02</span>
-              <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm mb-4">2</div>
-              <h4 className="font-bold text-base text-white mb-2">Grant Drive Access</h4>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                In a single screen, Google will ask permission to create and sync your private <code>Tasker App Data</code> vault.
-              </p>
-            </div>
-
-            <div className="p-6 rounded-2xl bg-slate-950 border border-slate-800 relative">
-              <span className="text-4xl font-extrabold text-indigo-500/30 absolute top-4 right-4">03</span>
-              <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm mb-4">3</div>
-              <h4 className="font-bold text-base text-white mb-2">Elevate Your Day</h4>
-              <p className="text-xs text-slate-400 leading-relaxed">
-                Instantly jump into your interactive calendar, set reminders, write notes, and leverage AI to conquer your goals.
-              </p>
+            {/* Tasker OS */}
+            <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-b from-indigo-950/40 to-slate-950 border border-indigo-600/50 space-y-4 shadow-xl shadow-indigo-600/10">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 block">
+                  Tasker OS Experience
+                </span>
+                <span className="px-2 py-0.5 bg-emerald-950 text-emerald-400 text-[10px] font-bold rounded border border-emerald-800">
+                  Recommended
+                </span>
+              </div>
+              <ul className="space-y-3 text-xs sm:text-sm text-slate-200">
+                <li className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Stored 100% in your personal Google Drive (`📁 Tasker App Data`)</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Free forever using your existing Google Cloud storage</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Standard open JSON formats & instant AES-256 backup downloads</span>
+                </li>
+                <li className="flex items-start gap-2.5">
+                  <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <span>Complete privacy: Zero tracking, zero telemetry, client-side only</span>
+                </li>
+              </ul>
             </div>
 
           </div>
@@ -384,32 +489,72 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onSignIn
         </div>
       </section>
 
-      {/* BOTTOM CTA BANNER WITH CARTOON GIRL */}
-      <section className="py-20 px-4 sm:px-8 max-w-4xl mx-auto text-center w-full">
-        <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-900/60 shadow-2xl relative overflow-hidden">
+      {/* HOW IT WORKS 3-STEP FLOW */}
+      <section id="how-it-works" className="py-20 px-4 sm:px-8 max-w-5xl mx-auto w-full text-center space-y-12">
+        <div>
+          <h2 className="text-xs uppercase tracking-widest text-indigo-400 font-bold mb-2">Simple Setup</h2>
+          <h3 className="text-3xl sm:text-4xl font-extrabold text-white">Up and Running in 30 Seconds</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
           
+          <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-md">
+              1
+            </div>
+            <h4 className="font-bold text-base text-white">Sign In with Google</h4>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Use your regular Google or Gmail account. One click verifies your identity without messy passwords.
+            </p>
+          </div>
+
+          <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-md">
+              2
+            </div>
+            <h4 className="font-bold text-base text-white">Connect Your Cloud Vault</h4>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Tasker OS creates a dedicated <code>Tasker App Data</code> folder in your Drive to sync notes, tasks, and media.
+            </p>
+          </div>
+
+          <div className="p-6 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-md">
+              3
+            </div>
+            <h4 className="font-bold text-base text-white">Achieve Peak Focus</h4>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              Plan your day, write your reflections, schedule alarms, and leverage AI models to elevate your productivity.
+            </p>
+          </div>
+
+        </div>
+      </section>
+
+      {/* FINAL CALL TO ACTION BANNER */}
+      <section className="py-20 px-4 sm:px-8 max-w-4xl mx-auto text-center w-full">
+        <div className="p-8 sm:p-12 rounded-3xl bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-900/70 shadow-2xl relative overflow-hidden space-y-6">
           <div className="absolute top-0 right-1/4 w-72 h-72 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
 
-          <h3 className="text-2xl sm:text-4xl font-extrabold text-white mb-3">
-            Ready to Take Control of Your Productivity?
+          <h3 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+            Ready to Take Control of Your Daily Life?
           </h3>
-          <p className="text-slate-300 text-xs sm:text-sm max-w-xl mx-auto mb-6">
-            Join thousands of productive thinkers who own their data on Google Drive without compromise.
+          <p className="text-slate-300 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
+            Experience the peace of mind of owning your data on Google Drive with a world-class productivity operating system.
           </p>
 
-          <div className="flex flex-col items-center">
+          <div className="flex flex-col items-center pt-2">
             <button
               onClick={onGetStarted}
-              className="py-4 px-8 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-base rounded-2xl shadow-xl shadow-indigo-600/40 transition flex items-center gap-3 group"
+              className="py-4 px-9 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-base rounded-2xl shadow-xl shadow-indigo-600/40 transition flex items-center gap-3 group"
             >
-              <span>Continue with Google</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition" />
+              <span>Get Started with Google</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </button>
             <span className="text-[11px] text-slate-500 mt-3 font-medium">
               Free • Private • No Credit Card Required
             </span>
           </div>
-
         </div>
       </section>
 
@@ -420,7 +565,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStarted, onSignIn
             <div className="w-6 h-6 rounded-lg bg-indigo-600 flex items-center justify-center text-white text-[10px] font-bold">T</div>
             <span className="font-bold text-slate-300">Tasker OS</span>
             <span>&bull;</span>
-            <span>Personal Google Drive Cloud Vault</span>
+            <span>Autonomous Daily Productivity & Personal Google Drive Vault</span>
           </div>
 
           <div className="flex items-center gap-4">

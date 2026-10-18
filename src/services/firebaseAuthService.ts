@@ -138,8 +138,18 @@ export class FirebaseAuthService {
       prompt: 'select_account',
     });
 
+    // Add timeout protection so the UI never gets stuck rotating
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Sign-in popup timed out or was blocked by your browser. Please check if popups or third-party cookies are allowed, or sign in directly using your Google email below.'));
+      }, 20000);
+    });
+
     try {
-      const result = await signInWithPopup(auth, provider);
+      const result = await Promise.race([
+        signInWithPopup(auth, provider),
+        timeoutPromise
+      ]);
       const user = result.user;
 
       // Extract OAuth credential containing Google Drive access token
@@ -179,9 +189,8 @@ export class FirebaseAuthService {
       }
 
       // Save drive state and mark as authenticated
-      import('./storageService').then(({ StorageService }) => {
-        StorageService.saveGoogleDriveState(driveState);
-      });
+      const { StorageService } = await import('./storageService');
+      StorageService.saveGoogleDriveState(driveState);
       GoogleAuthService.setAuthenticated(true);
 
       // Trigger Drive sync if access token was granted
@@ -194,14 +203,17 @@ export class FirebaseAuthService {
       const error = err as Error & { code?: string };
       console.error('Firebase Google Sign-In error:', error);
       if (error.code === 'auth/popup-closed-by-user') {
-        throw new Error('Sign-in popup was closed before completing. Please try again.');
+        throw new Error('Sign-in popup was closed before completing. Please try again or use direct email entry below.');
+      }
+      if (error.code === 'auth/popup-blocked') {
+        throw new Error('Your browser blocked the Google sign-in popup. Please allow popups for this site, or use direct email entry below.');
       }
       if (error.code === 'auth/cancelled-popup-request') {
-        throw new Error('Another sign-in request is already in progress.');
+        throw new Error('Another sign-in request was already active.');
       }
       if (error.code === 'auth/unauthorized-domain') {
         throw new Error(
-          `This domain (${typeof window !== 'undefined' ? window.location.hostname : 'current domain'}) is not authorized in Firebase Console. Go to Firebase Console -> Authentication -> Settings -> Authorized domains and add this domain.`
+          `Domain ${typeof window !== 'undefined' ? window.location.hostname : 'current domain'} is not yet added in Firebase Console > Authentication > Settings > Authorized domains. You can use direct email sign-in below immediately.`
         );
       }
       throw new Error(error.message || 'Firebase Google Sign-In failed.');
