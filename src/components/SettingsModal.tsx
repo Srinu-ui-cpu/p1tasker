@@ -52,10 +52,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isSyncingDrive, setIsSyncingDrive] = useState(false);
   const [accountFeedback, setAccountFeedback] = useState<string | null>(null);
 
-  // Firebase Auth State
-  const [fbConfig, setFbConfig] = useState(() => FirebaseAuthService.getConfig());
-  const [fbSaved, setFbSaved] = useState(false);
-
   if (!isOpen) return null;
 
   const handleSaveAIConfig = (newConfig: AIState) => {
@@ -719,76 +715,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                     );
                   })}
-                </div>
-              </div>
-
-              {/* Firebase Authentication Configuration */}
-              <div className="p-4 bg-slate-950/80 rounded-2xl border border-slate-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 bg-amber-950 text-amber-400 rounded-xl border border-amber-800/80">
-                      <Flame className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="font-bold text-xs text-slate-200 block">Firebase Authentication Bridge</span>
-                      <p className="text-[11px] text-slate-400">Enables 1-click Google Sign-In for any account without OAuth Testing whitelist restrictions</p>
-                    </div>
-                  </div>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                    FirebaseAuthService.isConfigured() 
-                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' 
-                      : 'bg-amber-950 text-amber-400 border border-amber-800'
-                  }`}>
-                    {FirebaseAuthService.isConfigured() ? 'Connected' : 'Not Configured'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-0.5">Firebase API Key</label>
-                    <input
-                      type="text"
-                      placeholder="AIzaSy..."
-                      value={fbConfig.apiKey}
-                      onChange={(e) => setFbConfig({ ...fbConfig, apiKey: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-200"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] text-slate-400 block mb-0.5">Firebase Project ID</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. tasker-productivity"
-                      value={fbConfig.projectId}
-                      onChange={(e) => setFbConfig({ ...fbConfig, projectId: e.target.value })}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-200"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <a
-                    href="https://console.firebase.google.com/"
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[11px] text-indigo-400 hover:text-indigo-300 underline flex items-center gap-1"
-                  >
-                    <span>Open Firebase Console</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      FirebaseAuthService.saveConfig(fbConfig);
-                      setFbSaved(true);
-                      onConfigUpdated();
-                      setTimeout(() => setFbSaved(false), 3000);
-                    }}
-                    className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold transition shadow-sm"
-                  >
-                    {fbSaved ? '✔ Saved!' : 'Save Firebase Config'}
-                  </button>
                 </div>
               </div>
 

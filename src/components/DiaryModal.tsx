@@ -18,14 +18,22 @@ import {
   CheckSquare,
   Bot,
   Trash2,
-  AlertTriangle
+  AlertTriangle,
+  FileUp,
+  LayoutTemplate,
+  Cloud,
+  Eye,
+  Plus
 } from 'lucide-react';
 import { DiaryEntry, Mood, FileAttachment, Priority } from '../types';
 import { StorageService } from '../services/storageService';
 import { SpeechService } from '../services/speechService';
 import { AIBrokerService } from '../services/aiBrokerService';
+import { GoogleAuthService } from '../services/googleAuthService';
 import { DiaryAIChatModal } from './DiaryAIChatModal';
 import { DiaryAIModelSelector } from './DiaryAIModelSelector';
+import { DriveMediaViewerModal } from './DriveMediaViewerModal';
+import { WordDocumentCanvas } from './WordDocumentCanvas';
 
 interface DiaryModalProps {
   date: string; // YYYY-MM-DD
@@ -47,7 +55,14 @@ export const DiaryModal: React.FC<DiaryModalProps> = ({
   const [aiNotification, setAiNotification] = useState<string | null>(null);
   const [dedupNotice, setDedupNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Word Document View vs Full Textarea Editor Mode
+  const [activeTab, setActiveTab] = useState<'canvas' | 'editor'>('canvas');
+
+  // Popup Preview Modal for Attached Files / Images (View in Drive)
+  const [viewerAttachment, setViewerAttachment] = useState<FileAttachment | null>(null);
 
   // Diary AI Chat Companion Modal State
   const [isDiaryChatOpen, setIsDiaryChatOpen] = useState(false);
@@ -191,29 +206,42 @@ export const DiaryModal: React.FC<DiaryModalProps> = ({
     }
   };
 
-  // --- 📎 FILE UPLOAD WITH SHA-256 DEDUPLICATION ---
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
+  // --- 📎 FILE UPLOAD WITH SHA-256 DEDUPLICATION & INLINE INSERTION ---
+  const handleInsertMediaFile = async (file: File) => {
     try {
-      let currentAttachments = [...entry.attachments];
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        const { attachment, isDuplicate } = await StorageService.processAndDeduplicateFile(file, date);
+      const { attachment, isDuplicate } = await StorageService.processAndDeduplicateFile(file, date);
+      
+      let newContent = entry.content;
+      const marker = `\n\n{{attachment:${attachment.id}}}\n\n`;
 
-        currentAttachments = [...currentAttachments, attachment];
-        const updated = { ...entry, attachments: currentAttachments };
-        setEntry(updated);
-        StorageService.saveDiaryForDate(updated);
-
-        if (isDuplicate) {
-          setDedupNotice(`⚡ Reused existing file "${file.name}" (SHA-256 deduplicated, 0 redundant bytes).`);
+      if (textareaRef.current) {
+        const { selectionStart, selectionEnd } = textareaRef.current;
+        if (selectionStart !== undefined && selectionStart >= 0) {
+          const before = entry.content.substring(0, selectionStart);
+          const after = entry.content.substring(selectionEnd || selectionStart);
+          newContent = `${before}${marker}${after}`;
         } else {
-          setDedupNotice(`Uploaded "${file.name}" to diary!`);
+          newContent = entry.content ? `${entry.content.trimEnd()}${marker}` : marker.trim();
         }
-        setTimeout(() => setDedupNotice(null), 4000);
+      } else {
+        newContent = entry.content ? `${entry.content.trimEnd()}${marker}` : marker.trim();
       }
+
+      const updated = {
+        ...entry,
+        content: newContent,
+        attachments: [...entry.attachments.filter((a) => a.id !== attachment.id), attachment],
+        updatedAt: new Date().toISOString(),
+      };
+      setEntry(updated);
+      StorageService.saveDiaryForDate(updated);
+
+      if (isDuplicate) {
+        setDedupNotice(`⚡ Reused existing file "${file.name}" (SHA-256 deduplicated).`);
+      } else {
+        setDedupNotice(`✨ Inserted "${file.name}" inline into document!`);
+      }
+      setTimeout(() => setDedupNotice(null), 3500);
 
       // Proactively sync media file to Google Drive vault
       if (GoogleAuthService.isAuthenticated()) {
@@ -223,6 +251,17 @@ export const DiaryModal: React.FC<DiaryModalProps> = ({
       const error = err as Error;
       setDedupNotice(`Attachment note: ${error.message || 'Saved locally'}`);
       setTimeout(() => setDedupNotice(null), 4000);
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        await handleInsertMediaFile(files[i]);
+      }
     } finally {
       if (e.target) e.target.value = '';
     }
@@ -236,18 +275,25 @@ export const DiaryModal: React.FC<DiaryModalProps> = ({
     setFileToDelete(null);
 
     StorageService.deleteDiaryAttachment(date, toRemove.id);
-    const updated = StorageService.getDiaryForDate(date);
+
+    // Clean up inline tag from text
+    const cleanedContent = entry.content
+      .split(`{{attachment:${toRemove.id}}}`)
+      .join('')
+      .split(`{{file:${toRemove.id}}}`)
+      .join('')
+      .replace(/\n{3,}/g, '\n\n');
+
+    const updated = {
+      ...StorageService.getDiaryForDate(date),
+      content: cleanedContent,
+    };
     setEntry(updated);
+    StorageService.saveDiaryForDate(updated);
 
     // Sync removal to Google Drive cloud vault
-    try {
-      import('../services/googleAuthService').then(({ GoogleAuthService }) => {
-        if (GoogleAuthService.isAuthenticated()) {
-          GoogleAuthService.triggerDriveSync().catch(() => {});
-        }
-      });
-    } catch {
-      // ignore
+    if (GoogleAuthService.isAuthenticated()) {
+      GoogleAuthService.triggerDriveSync().catch(() => {});
     }
 
     setAiNotification(`✔ Deleted "${toRemove.name}" from diary & Google Drive vault!`);
@@ -515,158 +561,236 @@ ${entry.content}`;
           </div>
         )}
 
+        {/* View Switcher: Word Document Canvas vs Full Editor */}
+        <div className="px-6 pt-3 flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center bg-slate-950 border border-slate-800 rounded-2xl p-1 shadow-md">
+            <button
+              type="button"
+              onClick={() => setActiveTab('canvas')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                activeTab === 'canvas'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <LayoutTemplate className="w-3.5 h-3.5" />
+              <span>Word Document Canvas</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('editor')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition ${
+                activeTab === 'editor'
+                  ? 'bg-indigo-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Full Editor & Markdown</span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="file"
+              ref={imageInputRef}
+              onChange={handleFileUpload}
+              accept="image/*"
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => imageInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950 hover:bg-slate-800 text-indigo-300 border border-slate-800 text-xs font-semibold transition"
+              title="Upload and insert an image inline at cursor"
+            >
+              <ImageIcon className="w-3 h-3 text-indigo-400" />
+              <span>+ Image</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-semibold transition"
+              title="Upload and attach any file/document inline"
+            >
+              <FileUp className="w-3 h-3 text-slate-400" />
+              <span>+ File</span>
+            </button>
+          </div>
+        </div>
+
         {/* Editor Body */}
-        <div className="p-6 flex-1 overflow-y-auto space-y-4">
-          <DiaryAIModelSelector />
+        {activeTab === 'canvas' ? (
+          <div className="p-6 flex-1 overflow-y-auto space-y-4">
+            <WordDocumentCanvas
+              content={entry.content}
+              attachments={entry.attachments}
+              onContentChange={handleSaveContent}
+              onOpenViewer={(att) => setViewerAttachment(att)}
+              onDeleteAttachment={(att) => setFileToDelete(att)}
+              onInsertMedia={handleInsertMediaFile}
+              date={date}
+            />
+          </div>
+        ) : (
+          <div className="p-6 flex-1 overflow-y-auto space-y-4">
+            <DiaryAIModelSelector />
 
-          <textarea
-            ref={textareaRef}
-            rows={9}
-            value={entry.content}
-            onChange={(e) => handleSaveContent(e.target.value)}
-            placeholder="Write your thoughts for today, or speak in any language (Telugu, Hindi, English, etc.) using the microphone..."
-            className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-4 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-purple-500 leading-relaxed resize-none"
-          />
+            <textarea
+              ref={textareaRef}
+              rows={9}
+              value={entry.content}
+              onChange={(e) => handleSaveContent(e.target.value)}
+              placeholder="Write your thoughts for today, or speak in any language (Telugu, Hindi, English, etc.) using the microphone... (Tip: Click + Image or + File to embed media between paragraphs)"
+              className="w-full bg-slate-950/60 border border-slate-800 rounded-2xl p-4 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-purple-500 leading-relaxed resize-none"
+            />
 
-          {/* Selective Translate Panel */}
-          {isTranslateOpen && (
-            <div className="p-4 bg-slate-950 border border-indigo-700/60 rounded-2xl space-y-3 animate-in fade-in zoom-in-95">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Languages className="w-4 h-4 text-indigo-400" />
-                  <span className="text-xs font-bold text-white">Multi-Language Translate (Auto-Pastes at Bottom)</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800/80 font-mono">
-                    {isSelectionOnly ? '✂️ Selected Snippet' : '📄 Full Diary'}
+            {/* Selective Translate Panel */}
+            {isTranslateOpen && (
+              <div className="p-4 bg-slate-950 border border-indigo-700/60 rounded-2xl space-y-3 animate-in fade-in zoom-in-95">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Languages className="w-4 h-4 text-indigo-400" />
+                    <span className="text-xs font-bold text-white">Multi-Language Translate (Auto-Pastes at Bottom)</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-950 text-indigo-300 border border-indigo-800/80 font-mono">
+                      {isSelectionOnly ? '✂️ Selected Snippet' : '📄 Full Diary'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setIsTranslateOpen(false)}
+                    className="p-1 text-slate-400 hover:text-white rounded-lg transition"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Text Snippet Preview */}
+                <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 max-h-24 overflow-y-auto text-xs text-slate-300 font-mono">
+                  {translateTargetText || '(No text to translate)'}
+                </div>
+
+                {/* Language Picker */}
+                <div>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
+                    Click any language to translate & auto-paste at bottom of diary:
+                  </span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {AVAILABLE_LANGUAGES.map((lang) => (
+                      <button
+                        key={lang.code}
+                        onClick={() => handleExecuteTranslate(lang.name)}
+                        disabled={aiLoading}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
+                          selectedLanguage === lang.name
+                            ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/30 font-bold'
+                            : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
+                        }`}
+                      >
+                        <span>{lang.flag}</span>
+                        <span>{lang.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Translation Output & Application Options */}
+                {translatedResult && (
+                  <div className="mt-3 p-3 bg-indigo-950/40 border border-indigo-800/50 rounded-xl space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-indigo-300">
+                        ✔ Result in {selectedLanguage} (Already appended to diary):
+                      </span>
+                      <button
+                        onClick={() => navigator.clipboard.writeText(translatedResult)}
+                        className="text-[10px] text-indigo-400 hover:text-white transition"
+                      >
+                        📋 Copy Text
+                      </button>
+                    </div>
+                    <p className="text-xs text-slate-100 whitespace-pre-wrap leading-relaxed bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
+                      {translatedResult}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* AI Summary Card (if exists) */}
+            {entry.aiSummary && (
+              <div className="p-4 bg-purple-950/30 border border-purple-800/40 rounded-2xl">
+                <span className="text-[11px] font-extrabold text-purple-300 uppercase tracking-wider block mb-1">AI Daily Summary</span>
+                <p className="text-xs text-purple-200 whitespace-pre-wrap leading-relaxed">{entry.aiSummary}</p>
+              </div>
+            )}
+
+            {/* Attachments Section with compact preview thumbnails & Click to View in Drive popup */}
+            {entry.attachments.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                    Attached Documents & Media ({entry.attachments.length})
+                  </span>
+                  <span className="text-[10px] text-slate-500 font-mono">
+                    Click any item to view in Drive popup
                   </span>
                 </div>
-                <button
-                  onClick={() => setIsTranslateOpen(false)}
-                  className="p-1 text-slate-400 hover:text-white rounded-lg transition"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
 
-              {/* Text Snippet Preview */}
-              <div className="bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 max-h-24 overflow-y-auto text-xs text-slate-300 font-mono">
-                {translateTargetText || '(No text to translate)'}
-              </div>
-
-              {/* Language Picker */}
-              <div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1.5">
-                  Click any language to translate & auto-paste at bottom of diary:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {AVAILABLE_LANGUAGES.map((lang) => (
-                    <button
-                      key={lang.code}
-                      onClick={() => handleExecuteTranslate(lang.name)}
-                      disabled={aiLoading}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
-                        selectedLanguage === lang.name
-                          ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/30 font-bold'
-                          : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border-slate-700'
-                      }`}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {entry.attachments.map((file) => (
+                    <div 
+                      key={file.id} 
+                      onClick={() => setViewerAttachment(file)}
+                      className="relative group rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-800/80 shadow-md hover:border-indigo-600/70 transition cursor-pointer"
                     >
-                      <span>{lang.flag}</span>
-                      <span>{lang.name}</span>
-                    </button>
+                      {/* Delete "X" Button on Top Right */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFileToDelete(file);
+                        }}
+                        className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full bg-slate-950/85 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center transition shadow-lg border border-slate-700/60 hover:border-rose-500"
+                        title={`Delete ${file.name} from diary and Drive`}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Thumbnail Preview Area */}
+                      {file.type.startsWith('image') && file.dataUrl ? (
+                        <div className="w-full h-24 sm:h-28 bg-slate-950 flex items-center justify-center overflow-hidden">
+                          <img 
+                            src={file.dataUrl} 
+                            alt={file.name} 
+                            className="w-full h-full object-cover transition group-hover:scale-105 duration-200" 
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-full h-24 sm:h-28 bg-slate-950 flex flex-col items-center justify-center gap-1.5 p-3 text-center border-b border-slate-800/80">
+                          <FileText className="w-7 h-7 text-indigo-400" />
+                          <span className="text-[10px] text-slate-400 uppercase font-mono">{file.type.split('/')[1] || 'FILE'}</span>
+                        </div>
+                      )}
+
+                      {/* File Metadata Label */}
+                      <div className="p-2.5">
+                        <span className="text-xs font-semibold text-slate-200 truncate block" title={file.name}>
+                          {file.name}
+                        </span>
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mt-0.5">
+                          <span>{(file.size / 1024).toFixed(0)} KB</span>
+                          <span className="text-indigo-400 group-hover:underline flex items-center gap-0.5">
+                            <Eye className="w-2.5 h-2.5" /> View
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </div>
-
-              {/* Translation Output & Application Options */}
-              {translatedResult && (
-                <div className="mt-3 p-3 bg-indigo-950/40 border border-indigo-800/50 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-bold text-indigo-300">
-                      ✔ Result in {selectedLanguage} (Already appended to diary):
-                    </span>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(translatedResult)}
-                      className="text-[10px] text-indigo-400 hover:text-white transition"
-                    >
-                      📋 Copy Text
-                    </button>
-                  </div>
-                  <p className="text-xs text-slate-100 whitespace-pre-wrap leading-relaxed bg-slate-950/80 p-2.5 rounded-lg border border-slate-800">
-                    {translatedResult}
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* AI Summary Card (if exists) */}
-          {entry.aiSummary && (
-            <div className="p-4 bg-purple-950/30 border border-purple-800/40 rounded-2xl">
-              <span className="text-[11px] font-extrabold text-purple-300 uppercase tracking-wider block mb-1">AI Daily Summary</span>
-              <p className="text-xs text-purple-200 whitespace-pre-wrap leading-relaxed">{entry.aiSummary}</p>
-            </div>
-          )}
-
-          {/* Attachments Section with compact preview thumbnails & "X" delete button */}
-          {entry.attachments.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                  Attached Documents & Media ({entry.attachments.length})
-                </span>
-                <span className="text-[10px] text-slate-500 font-mono">Synced to Drive Vault</span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {entry.attachments.map((file) => (
-                  <div 
-                    key={file.id} 
-                    className="relative group rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-800/80 shadow-md hover:border-slate-600 transition"
-                  >
-                    {/* Delete "X" Button on Top Right */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setFileToDelete(file);
-                      }}
-                      className="absolute top-2 right-2 z-10 w-6 h-6 rounded-full bg-slate-950/85 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center transition shadow-lg border border-slate-700/60 hover:border-rose-500"
-                      title={`Delete ${file.name} from diary and Drive`}
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-
-                    {/* Thumbnail Preview Area (compact size, NOT original giant size) */}
-                    {file.type.startsWith('image') && file.dataUrl ? (
-                      <div className="w-full h-24 sm:h-28 bg-slate-950 flex items-center justify-center overflow-hidden">
-                        <img 
-                          src={file.dataUrl} 
-                          alt={file.name} 
-                          className="w-full h-full object-cover transition group-hover:scale-105 duration-200" 
-                        />
-                      </div>
-                    ) : (
-                      <div className="w-full h-24 sm:h-28 bg-slate-950 flex flex-col items-center justify-center gap-1.5 p-3 text-center border-b border-slate-800/80">
-                        <FileText className="w-7 h-7 text-indigo-400" />
-                        <span className="text-[10px] text-slate-400 uppercase font-mono">{file.type.split('/')[1] || 'FILE'}</span>
-                      </div>
-                    )}
-
-                    {/* File Metadata Label */}
-                    <div className="p-2.5">
-                      <span className="text-xs font-semibold text-slate-200 truncate block" title={file.name}>
-                        {file.name}
-                      </span>
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mt-0.5">
-                        <span>{(file.size / 1024).toFixed(0)} KB</span>
-                        <span>SHA: {file.hash.slice(0, 6)}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {/* Bottom Toolbar */}
         <div className="p-4 bg-slate-950/80 border-t border-slate-800 flex items-center justify-between flex-wrap gap-3">
@@ -839,6 +963,14 @@ ${entry.content}`;
           </div>
         </div>
       )}
+
+      {/* Drive Media Viewer Popup Modal (View in Drive, Download, Preview) */}
+      <DriveMediaViewerModal
+        isOpen={!!viewerAttachment}
+        attachment={viewerAttachment}
+        onClose={() => setViewerAttachment(null)}
+        date={date}
+      />
 
     </div>
   );
