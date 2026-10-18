@@ -1,0 +1,237 @@
+import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { 
+  getAuth, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  signOut as fbSignOut, 
+  onAuthStateChanged,
+  User as FirebaseUser,
+  Auth
+} from 'firebase/auth';
+import { GoogleAuthService } from './googleAuthService';
+
+export interface FirebaseConfig {
+  apiKey: string;
+  authDomain: string;
+  projectId: string;
+  storageBucket?: string;
+  messagingSenderId?: string;
+  appId?: string;
+}
+
+const FIREBASE_CONFIG_KEY = 'tasker_firebase_config_v1';
+
+// Default / fallback Firebase config template
+const DEFAULT_FIREBASE_CONFIG: FirebaseConfig = {
+  apiKey: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_API_KEY || '',
+  authDomain: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_AUTH_DOMAIN || '',
+  projectId: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_PROJECT_ID || '',
+  storageBucket: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_STORAGE_BUCKET || '',
+  messagingSenderId: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+  appId: (import.meta as unknown as { env?: Record<string, string> }).env?.VITE_FIREBASE_APP_ID || '',
+};
+
+export class FirebaseAuthService {
+  private static cachedAuth: Auth | null = null;
+  private static cachedApp: FirebaseApp | null = null;
+
+  /**
+   * Retrieves stored or env Firebase configuration.
+   */
+  static getConfig(): FirebaseConfig {
+    try {
+      const stored = localStorage.getItem(FIREBASE_CONFIG_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.apiKey) {
+          return { ...DEFAULT_FIREBASE_CONFIG, ...parsed };
+        }
+      }
+    } catch {
+      // fallback
+    }
+    return DEFAULT_FIREBASE_CONFIG;
+  }
+
+  /**
+   * Saves updated Firebase configuration to local storage.
+   */
+  static saveConfig(config: FirebaseConfig): void {
+    localStorage.setItem(FIREBASE_CONFIG_KEY, JSON.stringify(config));
+    this.cachedAuth = null;
+    this.cachedApp = null;
+  }
+
+  /**
+   * Checks if Firebase Auth is configured with valid credentials.
+   */
+  static isConfigured(): boolean {
+    const cfg = this.getConfig();
+    return !!(cfg.apiKey?.trim() && cfg.authDomain?.trim() && cfg.projectId?.trim());
+  }
+
+  /**
+   * Initializes or returns the active Firebase App instance.
+   */
+  static getFirebaseApp(): FirebaseApp | null {
+    if (this.cachedApp) return this.cachedApp;
+
+    const config = this.getConfig();
+    if (!config.apiKey || !config.projectId) {
+      return null;
+    }
+
+    try {
+      const existing = getApps();
+      if (existing.length > 0) {
+        this.cachedApp = getApp();
+        return this.cachedApp;
+      }
+
+      this.cachedApp = initializeApp(config);
+      return this.cachedApp;
+    } catch (e) {
+      console.warn('Firebase initializeApp error:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Returns Firebase Auth instance.
+   */
+  static getAuthInstance(): Auth | null {
+    if (this.cachedAuth) return this.cachedAuth;
+    const app = this.getFirebaseApp();
+    if (!app) return null;
+
+    try {
+      this.cachedAuth = getAuth(app);
+      return this.cachedAuth;
+    } catch (e) {
+      console.warn('Firebase getAuth error:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Initiates Google Sign-In with Firebase Auth popup.
+   * Requests Google Drive scopes so the user's storage vault is synced to Google Drive.
+   */
+  static async signInWithGoogle(): Promise<{
+    user: FirebaseUser;
+    accessToken?: string;
+  }> {
+    const auth = this.getAuthInstance();
+    if (!auth) {
+      throw new Error(
+        'Firebase is not yet configured. Please enter your Firebase Project Config (API Key, Auth Domain, Project ID) to enable 1-click Google Sign-In.'
+      );
+    }
+
+    const provider = new GoogleAuthProvider();
+    // Request Drive file access and profile scopes
+    provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
+    provider.addScope('https://www.googleapis.com/auth/userinfo.email');
+    provider.addScope('https://www.googleapis.com/auth/drive.file');
+
+    provider.setCustomParameters({
+      prompt: 'select_account',
+    });
+
+    try {
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Extract OAuth credential containing Google Drive access token
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      const accessToken = credential?.accessToken;
+
+      const userEmail = user.email || '';
+      const userName = user.displayName || userEmail.split('@')[0] || 'User';
+      const userAvatar = user.photoURL || undefined;
+
+      // Update Tasker GoogleDriveState with authenticated account details
+      const driveState = GoogleAuthService.getDriveState();
+      driveState.isConnected = true;
+      driveState.userEmail = userEmail;
+      driveState.userName = userName;
+      driveState.userAvatar = userAvatar;
+      driveState.activeStorageAccountEmail = userEmail;
+      if (accessToken) {
+        driveState.accessToken = accessToken;
+      }
+
+      // Add to linked accounts if not already present
+      const existingAccount = driveState.accounts.find(a => a.email.toLowerCase() === userEmail.toLowerCase());
+      if (!existingAccount) {
+        driveState.accounts.push({
+          id: `acc-${Date.now()}`,
+          name: userName,
+          email: userEmail,
+          avatarUrl: userAvatar,
+          isPrimary: true,
+          addedAt: new Date().toISOString(),
+          isActiveStorage: true,
+        });
+      } else {
+        existingAccount.avatarUrl = userAvatar;
+        existingAccount.name = userName;
+      }
+
+      // Save drive state and mark as authenticated
+      import('./storageService').then(({ StorageService }) => {
+        StorageService.saveGoogleDriveState(driveState);
+      });
+      GoogleAuthService.setAuthenticated(true);
+
+      // Trigger Drive sync if access token was granted
+      if (accessToken) {
+        GoogleAuthService.triggerDriveSync().catch(() => {});
+      }
+
+      return { user, accessToken };
+    } catch (err: unknown) {
+      const error = err as Error & { code?: string };
+      console.error('Firebase Google Sign-In error:', error);
+      if (error.code === 'auth/popup-closed-by-user') {
+        throw new Error('Sign-in popup was closed before completing. Please try again.');
+      }
+      if (error.code === 'auth/cancelled-popup-request') {
+        throw new Error('Another sign-in request is already in progress.');
+      }
+      if (error.code === 'auth/unauthorized-domain') {
+        throw new Error(
+          `This domain (${typeof window !== 'undefined' ? window.location.hostname : 'current domain'}) is not authorized in Firebase Console. Go to Firebase Console -> Authentication -> Settings -> Authorized domains and add this domain.`
+        );
+      }
+      throw new Error(error.message || 'Firebase Google Sign-In failed.');
+    }
+  }
+
+  /**
+   * Signs the user out of Firebase and purges local session.
+   */
+  static async signOut(): Promise<void> {
+    const auth = this.getAuthInstance();
+    if (auth) {
+      try {
+        await fbSignOut(auth);
+      } catch {
+        // ignore
+      }
+    }
+    GoogleAuthService.signOut();
+  }
+
+  /**
+   * Listens to Firebase Auth state changes.
+   */
+  static onAuthStateChanged(callback: (user: FirebaseUser | null) => void): () => void {
+    const auth = this.getAuthInstance();
+    if (!auth) {
+      callback(null);
+      return () => {};
+    }
+    return onAuthStateChanged(auth, callback);
+  }
+}

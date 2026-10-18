@@ -14,6 +14,7 @@ import { GoogleLoginPage } from './components/GoogleLoginPage';
 import { BackupRestoreView } from './components/BackupRestoreView';
 import { StorageService } from './services/storageService';
 import { GoogleAuthService } from './services/googleAuthService';
+import { FirebaseAuthService } from './services/firebaseAuthService';
 import { AlarmService, ActiveAlarmTrigger } from './services/alarmService';
 import { AIBrokerService } from './services/aiBrokerService';
 import { TaskItem, GoogleDriveState, AIProvider } from './types';
@@ -103,7 +104,8 @@ export function App() {
         onOpenSearch={() => setIsSearchOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onToggleChat={() => setIsChatOpen(!isChatOpen)}
-        onSignOut={() => {
+        onSignOut={async () => {
+          await FirebaseAuthService.signOut();
           GoogleAuthService.signOut();
           setIsAuthenticated(false);
         }}
