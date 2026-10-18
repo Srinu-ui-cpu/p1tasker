@@ -553,6 +553,68 @@ CRITICAL RULES:
     return this.localGrammarCorrection(text, 'Tasker Built-In Proofreader');
   }
 
+  /**
+   * AI Error Correction & Meaningful Sentence Generator:
+   * 1. Eliminates speech stutter and duplicate repeated words (e.g. "hello hello hello" -> "hello").
+   * 2. Fixes all typos, spelling mistakes, and grammatical issues.
+   * 3. Rewrites fragmented spoken thoughts into eloquent, coherent, and meaningful sentences.
+   * 4. Strictly protects and preserves all {{attachment:...}} and inline media markers.
+   */
+  static async correctAndPolishDiary(
+    text: string
+  ): Promise<{ correctedText: string; fixesApplied: number; modelUsed: string; summary: string }> {
+    if (!text.trim()) {
+      return { correctedText: text, fixesApplied: 0, modelUsed: 'None', summary: 'Document is empty.' };
+    }
+
+    const config = this.getConfig();
+    const hasApiKey = (config.activeProvider === 'groq' && !!config.apiKeys.groq) ||
+      (config.activeProvider === 'gemini' && !!config.apiKeys.gemini) ||
+      (config.activeProvider === 'openai' && !!config.apiKeys.openai) ||
+      (config.activeProvider === 'custom' && !!config.customConfig.apiKey);
+
+    if (hasApiKey) {
+      try {
+        const systemPrompt = `You are an expert biographer and text polisher for Tasker OS.
+The user wrote or dictated a daily journal entry.
+Perform thorough error correction and rewrite awkward spoken fragments into meaningful sentences:
+1. REMOVE DUPLICATE WORDS: Eliminate all speech-recognition stutter or repeated words (e.g. "hello hello hello" -> "hello", "I I I" -> "I", "today today" -> "today").
+2. POLISH INTO MEANINGFUL SENTENCES: Transform fragmented, run-on spoken thoughts into beautiful, well-punctuated, coherent sentences with natural paragraph breaks.
+3. FIX GRAMMAR & SPELLING: Correct all grammatical errors, typos, capitalization, and punctuation.
+4. PRESERVE INLINE MEDIA TAGS: You MUST strictly preserve all inline attachment tags unchanged: {{attachment:<id>}}, {{file:<id>}}, and ![caption](attachment:<id>). Do NOT modify or remove them.
+5. Return ONLY the final polished text without preambles, introductory chatter, or quotation marks.`;
+
+        const res = await this.completeText(text, systemPrompt);
+        let cleaned = res.text.trim();
+
+        // Safety fallback: ensure attachment tags in original are preserved
+        const attachmentTags = text.match(/\{\{(?:attachment|file):[a-zA-Z0-9_\-.:]+\}\}|!\[[^\]]*\]\(attachment:[a-zA-Z0-9_\-.:]+\)/g) || [];
+        for (const tag of attachmentTags) {
+          if (!cleaned.includes(tag)) {
+            cleaned += `\n\n${tag}`;
+          }
+        }
+
+        const fixes = Math.max(1, Math.abs(cleaned.length - text.length) + (cleaned !== text ? 1 : 0));
+        return {
+          correctedText: cleaned,
+          fixesApplied: fixes,
+          modelUsed: res.modelUsed,
+          summary: `Polished into meaningful sentences and fixed errors (${res.modelUsed}).`,
+        };
+      } catch (err) {
+        console.warn('AI diary polishing failed, falling back to local engine:', err);
+      }
+    }
+
+    // Built-in Smart Local Engine for instant offline error correction
+    const localResult = this.localGrammarCorrection(text, 'Tasker Built-In Proofreader');
+    return {
+      ...localResult,
+      summary: `Cleaned voice duplicates and corrected grammar (${localResult.fixesApplied} fixes applied).`,
+    };
+  }
+
   // --- 🌐 MULTI-LANGUAGE SELECTIVE TRANSLATION ---
   static async translateText(
     text: string,
@@ -642,9 +704,10 @@ Return ONLY the direct translated text without any explanation, markdown backtic
     output = output.replace(/\s+([,.;!?])/g, '$1');
     output = output.replace(/([,.;!?])(?=[a-zA-Z])/g, '$1 ');
 
-    // Deduplicate repeated words: "the the" -> "the"
-    output = output.replace(/\b([a-zA-Z]+)\s+\1\b/gi, (match, word) => {
-      fixes++;
+    // Deduplicate repeated words: "the the" -> "the", "hello hello hello" -> "hello"
+    output = output.replace(/\b([a-zA-Z0-9_]+)(?:\s+\1\b)+/gi, (match, word) => {
+      const count = match.split(/\s+/).length - 1;
+      fixes += count;
       return word;
     });
 

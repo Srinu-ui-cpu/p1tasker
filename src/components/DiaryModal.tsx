@@ -206,6 +206,30 @@ export const DiaryModal: React.FC<DiaryModalProps> = ({
     }
   };
 
+  // --- ✨ AI ERROR CORRECTION & MEANINGFUL SENTENCES ---
+  const handleAiErrorCorrection = async () => {
+    if (!entry.content.trim()) {
+      setAiNotification('Document is empty. Write or dictate your thoughts first.');
+      setTimeout(() => setAiNotification(null), 3500);
+      return;
+    }
+
+    setAiLoading(true);
+    setAiNotification('✨ AI is removing voice stutter, correcting errors & crafting meaningful sentences...');
+
+    try {
+      const res = await AIBrokerService.correctAndPolishDiary(entry.content);
+      handleSaveContent(res.correctedText);
+      setAiNotification(`✨ ${res.summary}`);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAiNotification(`Error correction note: ${error.message || 'Updated with built-in engine'}`);
+    } finally {
+      setAiLoading(false);
+      setTimeout(() => setAiNotification(null), 5000);
+    }
+  };
+
   // --- 📎 FILE UPLOAD WITH SHA-256 DEDUPLICATION & INLINE INSERTION ---
   const handleInsertMediaFile = async (file: File, insertAfterIndex?: number) => {
     try {
@@ -637,6 +661,17 @@ ${entry.content}`;
             >
               <FileUp className="w-3 h-3 text-slate-400" />
               <span>+ File</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={aiLoading || !entry.content.trim()}
+              onClick={handleAiErrorCorrection}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-purple-950/70 hover:bg-purple-900 text-purple-300 border border-purple-800/80 text-xs font-semibold disabled:opacity-40 transition shadow-sm"
+              title="AI Error Correction: Remove voice stutter duplicates, fix grammar & rewrite into meaningful sentences"
+            >
+              <Sparkles className="w-3 h-3 text-purple-400" />
+              <span>✨ Fix Errors</span>
             </button>
           </div>
         </div>

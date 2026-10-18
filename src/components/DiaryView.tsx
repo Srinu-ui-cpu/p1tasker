@@ -165,14 +165,11 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
       setAiNotification(`🎙️ Listening in ${dictationLang}... Speak into your microphone.`);
 
       const started = SpeechService.startDictation(
-        (transcript, isFinal) => {
+        (transcript) => {
           const base = dictationBaseRef.current;
           const separator = base && !base.endsWith(' ') ? ' ' : '';
           const newContent = `${base}${separator}${transcript}`;
           handleSaveContent(newContent);
-          if (isFinal) {
-            dictationBaseRef.current = newContent;
-          }
         },
         (errorMsg) => {
           setIsDictating(false);
@@ -190,6 +187,30 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
         setAiNotification('Speech recognition is not supported or microphone access was denied.');
         setTimeout(() => setAiNotification(null), 4000);
       }
+    }
+  };
+
+  // --- ✨ AI ERROR CORRECTION & MEANINGFUL SENTENCES ---
+  const handleAiErrorCorrection = async () => {
+    if (!entry.content.trim()) {
+      setAiNotification('Document is empty. Write or dictate your thoughts first.');
+      setTimeout(() => setAiNotification(null), 3500);
+      return;
+    }
+
+    setAiLoading(true);
+    setAiNotification('✨ AI is removing voice stutter, correcting errors & crafting meaningful sentences...');
+
+    try {
+      const res = await AIBrokerService.correctAndPolishDiary(entry.content);
+      handleSaveContent(res.correctedText);
+      setAiNotification(`✨ ${res.summary}`);
+    } catch (err: unknown) {
+      const error = err as Error;
+      setAiNotification(`Error correction note: ${error.message || 'Updated with built-in engine'}`);
+    } finally {
+      setAiLoading(false);
+      setTimeout(() => setAiNotification(null), 5000);
     }
   };
 
@@ -688,6 +709,17 @@ ${entry.content}`;
             <FileUp className="w-3.5 h-3.5 text-slate-400" />
             <span>+ Attach File</span>
           </button>
+
+          <button
+            type="button"
+            disabled={aiLoading || !entry.content.trim()}
+            onClick={handleAiErrorCorrection}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-950/70 hover:bg-purple-900 text-purple-300 border border-purple-800/80 text-xs font-semibold disabled:opacity-40 transition shadow-sm cursor-pointer"
+            title="AI Error Correction: Remove voice stutter duplicates, fix grammar & rewrite into meaningful sentences"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span>✨ Fix Errors & Polish</span>
+          </button>
         </div>
       </div>
 
@@ -968,6 +1000,18 @@ ${entry.content}`;
           >
             <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
             <span>{isAIRecording ? 'Stop & Write Diary' : 'AI Voice-to-Diary'}</span>
+          </button>
+
+          {/* AI Error Correction & Sentence Polisher */}
+          <button
+            type="button"
+            disabled={aiLoading || !entry.content.trim()}
+            onClick={handleAiErrorCorrection}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-purple-950/70 hover:bg-purple-900 text-purple-300 border border-purple-800/80 disabled:opacity-40 transition shadow-sm"
+            title="AI Error Correction: Remove voice stutter duplicates, fix grammar & rewrite into meaningful sentences"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+            <span>AI Error Correction</span>
           </button>
 
           {/* Read Aloud TTS */}

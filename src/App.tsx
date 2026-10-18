@@ -18,6 +18,7 @@ import { GoogleAuthService } from './services/googleAuthService';
 import { FirebaseAuthService } from './services/firebaseAuthService';
 import { AlarmService, ActiveAlarmTrigger } from './services/alarmService';
 import { AIBrokerService } from './services/aiBrokerService';
+import { ThemeService } from './services/themeService';
 import { TaskItem, GoogleDriveState, AIProvider } from './types';
 
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
@@ -84,6 +85,7 @@ export function App() {
 
   // Start background alarm polling loop & subscribe to alarms
   useEffect(() => {
+    ThemeService.initTheme();
     AlarmService.startScheduler();
     const unsubscribe = AlarmService.onAlarm((trigger) => {
       setActiveAlarm(trigger);

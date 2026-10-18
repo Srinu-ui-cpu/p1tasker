@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Calendar as CalendarIcon, 
   CheckSquare, 
@@ -13,10 +13,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldCheck,
-  LogOut
+  LogOut,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { format, parseISO, addDays, subDays } from 'date-fns';
 import { GoogleDriveState, AIProvider } from '../types';
+import { ThemeService, ThemeMode } from '../services/themeService';
 
 interface NavbarProps {
   currentDate: string; // YYYY-MM-DD
@@ -47,6 +50,14 @@ export const Navbar: React.FC<NavbarProps> = ({
   driveState,
   activeAIProvider,
 }) => {
+  const [theme, setTheme] = useState<ThemeMode>(() => ThemeService.getTheme());
+
+  useEffect(() => {
+    return ThemeService.subscribe((newTheme) => {
+      setTheme(newTheme);
+    });
+  }, []);
+
   const parsedDate = parseISO(currentDate);
 
   const handlePrevDay = () => {
@@ -108,7 +119,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Center Nav Tabs: Calendar First! */}
-        <nav className="flex items-center bg-slate-800/60 p-1 rounded-xl border border-slate-800 text-sm">
+        <nav className="flex items-center bg-slate-800/60 p-1 rounded-xl border border-slate-800 text-sm overflow-x-auto max-w-full scrollbar-none">
           <button
             onClick={() => setActiveTab('calendar')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition ${
@@ -259,6 +270,23 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Settings & Cloud Sync"
           >
             <Settings className="w-4 h-4" />
+          </button>
+
+          {/* Theme Mode Toggle (Dark / Light) */}
+          <button
+            onClick={() => {
+              const next = ThemeService.toggleTheme();
+              setTheme(next);
+            }}
+            className="p-2 rounded-lg bg-slate-800/60 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/60 transition shadow-sm cursor-pointer"
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            aria-label="Toggle Dark and Light Mode"
+          >
+            {theme === 'dark' ? (
+              <Sun className="w-4 h-4 text-amber-400 hover:rotate-45 transition-transform duration-300" />
+            ) : (
+              <Moon className="w-4 h-4 text-indigo-400 hover:-rotate-12 transition-transform duration-300" />
+            )}
           </button>
         </div>
 

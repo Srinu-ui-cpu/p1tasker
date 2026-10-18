@@ -38,6 +38,15 @@ export class SpeechService {
   }
 
   /**
+   * Cleans continuous speech transcript by eliminating stuttered or duplicate adjacent words
+   * across any language or script (English, Telugu, Hindi, Spanish, etc.)
+   */
+  static cleanSpeechStutter(text: string): string {
+    if (!text) return '';
+    return text.replace(/(^|\s+)([^\s,.;!?]+)(?:\s+\2)+(?=$|\s+|[,.;!?])/gu, '$1$2').trim();
+  }
+
+  /**
    * Start listening to voice dictation in ANY language (Telugu, Hindi, English, Spanish, etc.)
    */
   static startDictation(
@@ -75,7 +84,7 @@ export class SpeechService {
           }
         }
 
-        const combined = (finalTranscript + interimTranscript).trim();
+        const combined = SpeechService.cleanSpeechStutter((finalTranscript + interimTranscript).trim());
         if (combined) {
           onText(combined, !!finalTranscript);
         }

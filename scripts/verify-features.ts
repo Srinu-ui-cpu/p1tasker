@@ -95,6 +95,16 @@ class MockImage {
     appendChild: () => {},
     removeChild: () => {},
   },
+  documentElement: {
+    classList: (() => {
+      const classes = new Set<string>(['dark']);
+      return {
+        add: (cls: string) => classes.add(cls),
+        remove: (cls: string) => classes.delete(cls),
+        contains: (cls: string) => classes.has(cls),
+      };
+    })(),
+  },
 };
 
 (globalThis as any).Notification = class MockNotification {
@@ -275,6 +285,7 @@ import { AIBrokerService } from '../src/services/aiBrokerService.ts';
 import { AlarmService } from '../src/services/alarmService.ts';
 import { BackupService } from '../src/services/backupService.ts';
 import { SpeechService } from '../src/services/speechService.ts';
+import { ThemeService } from '../src/services/themeService.ts';
 import { parseDocumentContent } from '../src/components/WordDocumentCanvas.tsx';
 import { TaskItem, DiaryEntry, FileAttachment } from '../src/types/index.ts';
 import * as fs from 'fs';
@@ -1027,6 +1038,187 @@ End of day conclusions and action items.`;
     // Both files must have handleInsertMediaFile accepting insertAfterIndex
     assert(viewContent.includes('handleInsertMediaFile = async (file: File, insertAfterIndex?: number)'), 'DiaryView accepts insertAfterIndex');
     assert(modalContent.includes('handleInsertMediaFile = async (file: File, insertAfterIndex?: number)'), 'DiaryModal accepts insertAfterIndex');
+  });
+
+  // =========================================================================
+  // SUITE 8: Speech Dictation & Stutter Deduplication Engine
+  // =========================================================================
+  console.log('\n>> Running Suite 8: Speech Dictation & Stutter Deduplication Engine');
+
+  await runTest('SpeechService', 'cleanSpeechStutter removes 2x and 3x repeated words', () => {
+    const input1 = 'hello hello hello world';
+    const cleaned1 = SpeechService.cleanSpeechStutter(input1);
+    assertEquals(cleaned1, 'hello world', 'Triple hello collapsed to single hello');
+
+    const input2 = 'today today today I I I went to the the store';
+    const cleaned2 = SpeechService.cleanSpeechStutter(input2);
+    assertEquals(cleaned2, 'today I went to the store', 'Multiple stutters cleaned cleanly');
+  });
+
+  await runTest('SpeechService', 'cleanSpeechStutter works across Indic and Telugu unicode scripts', () => {
+    const teluguStutter = 'నమస్కారం నమస్కారం మిత్రులారా';
+    const cleanedTelugu = SpeechService.cleanSpeechStutter(teluguStutter);
+    assertEquals(cleanedTelugu, 'నమస్కారం మిత్రులారా', 'Telugu duplicated greeting collapsed to single occurrence');
+  });
+
+  await runTest('SpeechService', 'DiaryView continuous dictation prevents session-accumulation duplication', () => {
+    const diaryViewPath = path.resolve(process.cwd(), 'src/components/DiaryView.tsx');
+    const diaryContent = fs.readFileSync(diaryViewPath, 'utf8');
+
+    // Ensure dictationBaseRef.current is NOT re-assigned inside onText on isFinal
+    assert(!diaryContent.includes('if (isFinal) {\n            dictationBaseRef.current = newContent;\n          }'), 'DiaryView does not reassign dictationBaseRef on isFinal');
+    assert(diaryContent.includes('dictationBaseRef.current = entry.content'), 'DiaryView sets dictationBaseRef once on start');
+  });
+
+  // =========================================================================
+  // SUITE 9: AI Error Correction & Sentence Reconstruction Engine
+  // =========================================================================
+  console.log('\n>> Running Suite 9: AI Error Correction & Sentence Reconstruction Engine');
+
+  await runTest('AIBrokerService', 'correctAndPolishDiary cleans speech stutter and reconstructs meaningful sentences', async () => {
+    const rawStutterInput = 'hello hello hello i am so happy to launch this project and it was definately a success';
+    const result = await AIBrokerService.correctAndPolishDiary(rawStutterInput);
+
+    assert(!!result.correctedText, 'Must return corrected text');
+    assert(!result.correctedText.includes('hello hello'), 'Must not contain repeated hello words');
+    assert(result.fixesApplied > 0, 'Must record fixes applied');
+    assert(result.correctedText.includes('definitely'), 'Typo definately must be corrected to definitely');
+  });
+
+  await runTest('AIBrokerService', 'correctAndPolishDiary strictly preserves inline attachment markers', async () => {
+    const inputWithMedia = `Morning team sync notes.
+
+{{attachment:att-img-secret999}}
+
+Reviewed quarterly numbers and architectural design.
+
+![System Diagram](attachment:att-doc-vault888)
+
+End of meeting notes.`;
+
+    const result = await AIBrokerService.correctAndPolishDiary(inputWithMedia);
+    assert(result.correctedText.includes('{{attachment:att-img-secret999}}'), 'Must preserve {{attachment:...}} tag');
+    assert(result.correctedText.includes('attachment:att-doc-vault888'), 'Must preserve markdown attachment reference');
+  });
+
+  await runTest('AIBrokerService', 'UI provides AI Error Correction button in DiaryView and DiaryModal', () => {
+    const diaryViewPath = path.resolve(process.cwd(), 'src/components/DiaryView.tsx');
+    const diaryModalPath = path.resolve(process.cwd(), 'src/components/DiaryModal.tsx');
+
+    const viewContent = fs.readFileSync(diaryViewPath, 'utf8');
+    const modalContent = fs.readFileSync(diaryModalPath, 'utf8');
+
+    assert(viewContent.includes('handleAiErrorCorrection'), 'DiaryView includes handleAiErrorCorrection handler');
+    assert(viewContent.includes('✨ Fix Errors & Polish') || viewContent.includes('AI Error Correction'), 'DiaryView renders Error Correction button');
+    assert(modalContent.includes('handleAiErrorCorrection'), 'DiaryModal includes handleAiErrorCorrection handler');
+    assert(modalContent.includes('✨ Fix Errors'), 'DiaryModal renders Fix Errors button');
+  });
+
+  // =========================================================================
+  // SUITE 10: Theme Mode (Dark/Light) Switcher & Persistence
+  // =========================================================================
+  console.log('\n>> Running Suite 10: Theme Mode (Dark/Light) Switcher & Persistence');
+
+  await runTest('ThemeService', 'ThemeService manages theme, persistence and root classList', () => {
+    // Default theme
+    const initial = ThemeService.getTheme();
+    assert(initial === 'dark' || initial === 'light', 'Theme returns valid enum');
+
+    // Switch to light
+    ThemeService.setTheme('light');
+    assertEquals(ThemeService.getTheme(), 'light', 'Theme switched to light');
+    assert(document.documentElement.classList.contains('light'), 'Root classList contains light');
+    assert(!document.documentElement.classList.contains('dark'), 'Root classList does not contain dark');
+
+    // Toggle back to dark
+    const toggled = ThemeService.toggleTheme();
+    assertEquals(toggled, 'dark', 'Toggled back to dark');
+    assertEquals(ThemeService.getTheme(), 'dark', 'Theme reports dark');
+    assert(document.documentElement.classList.contains('dark'), 'Root classList contains dark');
+  });
+
+  await runTest('ThemeService', 'Navbar includes Theme Mode toggle button with Sun and Moon icons', () => {
+    const navbarPath = path.resolve(process.cwd(), 'src/components/Navbar.tsx');
+    const navbarContent = fs.readFileSync(navbarPath, 'utf8');
+
+    assert(navbarContent.includes('ThemeService.toggleTheme()'), 'Navbar calls ThemeService.toggleTheme()');
+    assert(navbarContent.includes('<Sun'), 'Navbar renders Sun icon for dark mode toggle');
+    assert(navbarContent.includes('<Moon'), 'Navbar renders Moon icon for light mode toggle');
+  });
+
+  // =========================================================================
+  // SUITE 11: Multi-Device Responsive Viewport Layout & Screen Size Audit
+  // =========================================================================
+  console.log('\n>> Running Suite 11: Multi-Device Responsive Viewport Layout & Screen Size Audit');
+
+  await runTest('ResponsiveAudit', 'Mobile Viewport (375px - 428px) layout rules verify no rigid overflow', () => {
+    const navbarPath = path.resolve(process.cwd(), 'src/components/Navbar.tsx');
+    const canvasPath = path.resolve(process.cwd(), 'src/components/WordDocumentCanvas.tsx');
+
+    const navbarContent = fs.readFileSync(navbarPath, 'utf8');
+    const canvasContent = fs.readFileSync(canvasPath, 'utf8');
+
+    // Navbar navigation tabs must be horizontally scrollable on mobile
+    assert(navbarContent.includes('overflow-x-auto') && navbarContent.includes('max-w-full'), 'Nav tabs have overflow-x-auto and max-w-full');
+
+    // WordDocumentCanvas has responsive padding and max-w-4xl
+    assert(canvasContent.includes('max-w-4xl') && canvasContent.includes('w-full'), 'Canvas has fluid w-full max-w-4xl');
+  });
+
+  await runTest('ResponsiveAudit', 'Tablet and Desktop Viewports scale gracefully across grid layouts', () => {
+    const dayWorkspacePath = path.resolve(process.cwd(), 'src/components/DayWorkspace.tsx');
+    const calendarPath = path.resolve(process.cwd(), 'src/components/CalendarView.tsx');
+
+    const dayWorkspaceContent = fs.readFileSync(dayWorkspacePath, 'utf8');
+    const calendarContent = fs.readFileSync(calendarPath, 'utf8');
+
+    // DayWorkspace uses responsive layout container
+    assert(dayWorkspaceContent.includes('max-w-4xl mx-auto space-y-6') && dayWorkspaceContent.includes('flex-wrap'), 'DayWorkspace uses responsive container and flex-wrap');
+    // CalendarView uses 7-column layout
+    assert(calendarContent.includes('grid-cols-7'), 'CalendarView uses standard 7-column calendar grid');
+  });
+
+  await runTest('ResponsiveAudit', 'CSS Light Mode Overrides and Fluid Transitions are defined', () => {
+    const indexCssPath = path.resolve(process.cwd(), 'src/index.css');
+    const indexCssContent = fs.readFileSync(indexCssPath, 'utf8');
+
+    assert(indexCssContent.includes('html.light'), 'index.css defines html.light rules');
+    assert(indexCssContent.includes('.bg-slate-950') && indexCssContent.includes('.bg-slate-900'), 'index.css overrides surface colors in light mode');
+    assert(indexCssContent.includes('transition-colors'), 'index.css includes smooth color transitions');
+  });
+
+  // =========================================================================
+  // SUITE 12: Documentation Integrity Verification
+  // =========================================================================
+  console.log('\n>> Running Suite 12: Documentation Integrity Verification');
+
+  await runTest('Documentation', 'USAGE.md exists and contains complete user manual', () => {
+    const usagePath = path.resolve(process.cwd(), 'USAGE.md');
+    assert(fs.existsSync(usagePath), 'USAGE.md file must exist');
+    const content = fs.readFileSync(usagePath, 'utf8');
+    assert(content.length > 2500, 'USAGE.md is comprehensive (>2500 bytes)');
+    assert(content.includes('Voice Dictation'), 'USAGE.md covers Voice Dictation');
+    assert(content.includes('Fix Errors & Polish'), 'USAGE.md covers AI Error Correction');
+    assert(content.includes('Dark and Light Mode'), 'USAGE.md covers Theme Switcher');
+    assert(content.includes('Google Drive'), 'USAGE.md covers Google Drive cloud vault');
+  });
+
+  await runTest('Documentation', 'FEATURES.md exists and contains technical specifications', () => {
+    const featuresPath = path.resolve(process.cwd(), 'FEATURES.md');
+    assert(fs.existsSync(featuresPath), 'FEATURES.md file must exist');
+    const content = fs.readFileSync(featuresPath, 'utf8');
+    assert(content.length > 2500, 'FEATURES.md is comprehensive (>2500 bytes)');
+    assert(content.includes('Dual-Tier Storage'), 'FEATURES.md covers Dual-Tier Storage');
+    assert(content.includes('SHA-256'), 'FEATURES.md covers SHA-256 Deduplication');
+    assert(content.includes('AES-256-GCM'), 'FEATURES.md covers AES-256-GCM Vault');
+    assert(content.includes('Multi-Device Breakpoints'), 'FEATURES.md covers Responsive Breakpoints');
+  });
+
+  await runTest('Documentation', 'README.md links to USAGE.md and FEATURES.md', () => {
+    const readmePath = path.resolve(process.cwd(), 'README.md');
+    const content = fs.readFileSync(readmePath, 'utf8');
+    assert(content.includes('USAGE.md'), 'README.md links to USAGE.md');
+    assert(content.includes('FEATURES.md'), 'README.md links to FEATURES.md');
   });
   console.log('\n===============================================================');
   console.log('                 AUDIT EXECUTION RESULTS');

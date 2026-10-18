@@ -1,30 +1,35 @@
-# Tasker OS — Daily Tasks, Diary & Omni-AI Second Brain
+# Tasker OS — Daily Tasks, Diary & Omni-AI Second Brain 🚀
 
-> A unified multi-platform productivity suite built in 2 phases: Responsive Web Application (Phase 1) and Android APK (Phase 2), featuring 100% user-owned Google Drive storage, dynamic multi-provider BYOK AI with zero hardcoded models, and in-browser local WebGPU AI.
+> A unified multi-platform executive productivity suite featuring 100% user-owned Google Drive cloud vault storage, multi-model BYOK AI broker (Google Gemini, Groq Llama 3.3, xAI Grok, OpenAI), Word Document Canvas with inline media, multilingual voice dictation with automatic stutter deduplication, AI error correction, and instant Dark/Light theme switching.
 
 ---
 
-## 🛠️ Complete Technologies Used
+## 📚 Documentation & Guides
+
+- 📘 **[Complete User Guide (USAGE.md)](./USAGE.md)**: Step-by-step instructions for getting started, authentication, daily tasks, alarms, Word Document Canvas, voice typing in 15+ languages, AI error correction, and encrypted backups.
+- ⚡ **[Technical Architecture & Features (FEATURES.md)](./FEATURES.md)**: Deep technical specifications detailing dual-tier storage resilience, SHA-256 deduplication, multi-model AI routing, AES-256-GCM encryption, speech engineering, and responsive design breakpoints.
+
+---
+
+## 🛠️ Complete Technologies & Architecture
 
 | Category | Technology | Purpose & How It Is Used |
 | :--- | :--- | :--- |
 | **Frontend Framework** | **React 18 & TypeScript 5** | High-performance reactive UI with strict type safety across tasks, diary, and AI brokers. |
-| **Build & Dev Tooling** | **Vite 5 (Bundler & HMR)** | Sub-second dev server startup and optimized production bundling (under 300KB gzipped). |
-| **Styling & Design System** | **Tailwind CSS 3** | Modern executive dark-mode aesthetic with custom indigo/purple accents and sleek scrollbars. |
-| **Iconography** | **Lucide React** | Clean, accessible icons for tasks, calendar, mic, alarms, search, and AI indicators. |
-| **Date & Calendar Engine** | **Date-fns 3** | Bulletproof date arithmetic, month grid rendering, and Teams-style schedule slot calculation. |
-| **Voice Dictation (STT)** | **Web Speech Recognition API** | Real-time speech-to-text voice typing directly into the diary editor (zero server cost/delay). |
-| **Read Aloud (TTS)** | **Web Speech Synthesis API** | Native text-to-speech audio playback for diary entries and reflection reading. |
+| **Build & Dev Tooling** | **Vite 5 (Bundler & HMR)** | Sub-second dev server startup and optimized production bundling with Rollup code-splitting. |
+| **Styling & Design System** | **Tailwind CSS 3** | Responsive design system with custom light and dark mode themes, fluid breakpoints, and custom scrollbars. |
+| **Iconography** | **Lucide React** | Accessible, modern iconography for tasks, calendar, mic, alarms, search, theme toggles, and AI models. |
+| **Date & Calendar Engine** | **Date-fns 3** | Robust date arithmetic, monthly calendar grids, and Eisenhower scheduling matrices. |
+| **Voice Dictation (STT)** | **Web Speech API + Stutter Cleaner** | Real-time multilingual voice dictation (Telugu, Hindi, English, Spanish, etc.) with automatic stutter deduplication. |
+| **AI Audio Transcription** | **Groq Whisper Large v3 / OpenAI** | High-fidelity audio transcription converting unscripted thoughts into structured daily reflections. |
+| **AI Text Engine & Proofreader** | **Gemini, Groq, xAI Grok, OpenAI** | Omni-AI multi-provider broker for auto grammar correction, task extraction, semantic analysis, and question comprehension. |
+| **Read Aloud (TTS)** | **Web Speech Synthesis API** | Native text-to-speech audio playback for journal entries. |
 | **Audio Alarm Engine** | **Web Audio API** | Synthesizes melodic ascending 15-minute chimes and pulsing 5-minute urgent alarms in the browser. |
-| **OS Push Notifications** | **Web Notification API** | Delivers native Windows/macOS desktop notification center banners for scheduled tasks. |
+| **Cloud Vault & Storage** | **Google Drive API (appData)** | User-owned cloud vault storing tasks, diary, and media in a visible root folder (`📁 Tasker App Data`). |
+| **File Deduplication** | **Web Crypto API (SHA-256)** | Client-side cryptographic hashes eliminating duplicate file storage across dates. |
+| **Encrypted Backup Vault** | **Web Crypto API (AES-256-GCM)** | Military-grade encrypted file backup with PBKDF2 key derivation (100,000 iterations) and checksum verification. |
+| **Authentication** | **Firebase Auth + Google GIS** | Dual-tier authentication supporting Google OAuth with Drive scopes and fallback email accounts. |
 | **Mind Maps & Diagrams** | **Mermaid.js 10** | Dynamically renders interactive SVG mind maps, timelines, and flowcharts inside the chatbot. |
-| **Gamified Celebrations** | **Canvas-Confetti** | Rewarding confetti animations upon completing all daily tasks or checklists. |
-| **Cloud Vault & Storage** | **Google Drive API (appData)** | User-owned cloud sync storing tasks, diary, and media in a dedicated app folder (`📁 Tasker App Data`). |
-| **File Deduplication** | **Web Crypto API (SHA-256)** | Computes client-side cryptographic hashes to eliminate duplicate uploads and update latest files across dates. |
-| **AI Multi-Provider BYOK** | **Dynamic REST Models Engine** | Live query to `/v1/models` on Groq, Gemini, and OpenAI (no hardcoded models) + auto rate-limit (429) fallback. |
-| **Universal Custom AI** | **OpenAI-Compatible Standard** | Flexible custom model text box supporting xAI Grok, DeepSeek, Claude, OpenRouter, or local proxies. |
-| **Local On-Device AI** | **WebGPU & IndexedDB (WebLLM)** | Pre-flight storage & RAM check with an animated non-blocking background installer for 100% offline AI. |
-| **Generative Visuals** | **Pollinations AI API** | Instant zero-key AI image generation embedded directly into diary entries and chat responses. |
 
 ---
 
@@ -38,66 +43,24 @@ Simply double-click the included [`start.bat`](file:///c:/Users/mouli/Desktop/An
 ### Option 2: Using the Terminal
 Run the following commands inside PowerShell:
 ```powershell
-$env:Path = "$env:LOCALAPPDATA\Programs\nodejs;$env:Path"
+$env:Path = "$env:LOCALAPPDATA\Programs\nodejs;C:\Users\mouli\AppData\Local\Programs\Git\cmd;$env:Path"
 npm run dev
 ```
 Open **`http://localhost:5173`** in your browser!
 
 ---
 
-## 🌟 Core Features Guide
+## 🌟 Core Highlights
 
-### 1. 📅 Calendar & Day Workspace (`/day/YYYY-MM-DD`)
-* Click any date in the **Calendar** tab to immediately enter that date's workspace.
-* Dates feature visual indicators:
-  - 📔 **Purple Bookmark**: Indicates a written diary entry exists.
-  - 🔴 **Red Dot**: Indicates urgent/high priority tasks.
-  - **Task Count Badge**: Shows completed vs pending tasks.
-
-### 2. 📔 Daily Journal with Real-Time Voice Dictation
-* Inside the Day Workspace or top navigation, click **"📔 Write Day Diary"**.
-* Click **"🎙️ Voice Dictate"** and speak into your microphone; your spoken words will paste into the editor in real time!
-* Click **"Attach File"**: upload receipts, whiteboard pictures, or documents. The engine calculates a **SHA-256 checksum**; duplicate files are instantly deduplicated to save cloud storage.
-* Use the **AI Toolbar** to:
-  - **Summarize**: Generate 3-bullet takeaway summary.
-  - **Extract Tasks**: Convert rambling thoughts into scheduled to-dos.
-  - **Translate**: Translate diary entries into multiple languages.
-
-### 3. ⏱️ Teams-Style Schedule Grid with 15m & 5m Alarms
-* Switch to the **Scheduler** tab to see a visual day timeline (08:00 to 20:00).
-* Schedule meetings or focus blocks with custom start and end times.
-* When alarms are active:
-  - **15 Minutes Prior**: Gentle 3-tone chime + OS desktop notification banner.
-  - **5 Minutes Prior**: Urgent 4-tone alarm + screen takeover modal with **[Snooze 5 Min]** and **[Dismiss]**.
-
-### 4. 🔍 Universal Global Search (`Ctrl + K`)
-* Press `Ctrl + K` (or `Cmd + K`) anywhere in the app to open the live search modal.
-* Searches across tasks, diary entries, uploaded files (by name and SHA hash), dates, and tags.
-* Clicking any result deep-links directly to that date!
-
-### 5. 🤖 Omni-AI Knowledge Chatbot & Generative Tools
-* Click the **AI Brain** button in the top navbar.
-* Has full cross-date context:
-  - Ask: *"When did I work on the transaction tables in my project?"*
-  - The chatbot inspects your historical data and replies with **clickable date pills `[YYYY-MM-DD]`**!
-* Type: *"Create a mind map for my project"* &rarr; renders an interactive **Mermaid mind map**.
-* Type: *"Generate an image of a cozy study desk"* &rarr; generates and embeds a concept visual!
-
-### 6. ⚙️ Dynamic BYOK AI & Universal Custom Provider (Grok / DeepSeek)
-* Open **Settings** (`⚙️` icon in navbar):
-  - **Groq, Gemini, OpenAI**: Paste your API key and click **"Scan Live Models"**. The app queries the provider's live `/v1/models` endpoint dynamically—never hardcoded!
-  - **Custom Provider**: Enter any provider (e.g. `xAI Grok`), Base URL (`https://api.x.ai/v1`), Model Name (`grok-2-latest`), and Key, then click **"⚡ Test Connection"**.
-  - **Local AI**: Run pre-flight checks (Storage, RAM, WebGPU) and watch the animated background installer download offline model weights.
-
----
-
-## 📱 Phase 2: Android APK Compilation
-
-In Phase 2, this exact frontend can be compiled directly into a native Android `.apk` using Capacitor:
-```bash
-npm install @capacitor/core @capacitor/cli @capacitor/android
-npx cap init Tasker com.tasker.app --web-dir dist
-npx cap add android
-npx cap open android
-```
-This produces an installable `Tasker.apk` with native Android alarms and background push notifications!
+1. **Word Document Flow Diary**:
+   - Write sequential paragraphs, embed inline images or PDF documents between paragraphs, and read attachments in a popup Google Drive viewer.
+2. **Multilingual Voice Typing with Stutter Deduplication**:
+   - Speak in Telugu, Hindi, English, Spanish, or 10+ languages. Repeated words caused by microphone stutter (e.g. "hello hello hello") are automatically cleaned.
+3. **AI Error Correction & Sentence Reconstruction (`✨ Fix Errors & Polish`)**:
+   - One-click tool that cleans voice glitches, corrects grammar and typos, and writes meaningful, coherent sentences while keeping inline attachments safe.
+4. **Dark & Light Mode Switcher**:
+   - One-click header toggle (`☀️` / `🌙`) switching between Deep Slate Dark Mode and Crisp Executive Light Mode.
+5. **Universal Screen Responsiveness**:
+   - Fluid responsive layouts optimized for mobile (375px+), tablet, laptop, desktop, and 4K screens.
+6. **Encrypted Cross-Account Backups**:
+   - Export and import AES-256-GCM encrypted `.tasker` backup vaults with Merge and Replace modes.
