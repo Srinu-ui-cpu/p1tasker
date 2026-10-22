@@ -355,7 +355,7 @@ export class GoogleAuthService {
    */
   static async initDriveFolder(accessToken: string): Promise<string> {
     try {
-      // Search for existing Tasker App Data folder in My Drive root
+      // Search for existing Tasker App Data folder in My Drive
       const query = encodeURIComponent("(name = 'Tasker App Data' or name = '📁 Tasker App Data') and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
       const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,parents)`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -372,7 +372,7 @@ export class GoogleAuthService {
         }
       }
 
-      // Create new visible folder in root of "My Drive"
+      // Create new visible folder in user's Google Drive root
       const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
         method: 'POST',
         headers: {
@@ -382,7 +382,7 @@ export class GoogleAuthService {
         body: JSON.stringify({
           name: 'Tasker App Data',
           mimeType: 'application/vnd.google-apps.folder',
-          parents: ['root'], // Explicitly in My Drive root so it's 100% visible to the user!
+          parents: ['root'], // Explicitly in My Drive root so it's 100% visible to the user
           description: 'Autonomous Tasker OS private vault for tasks, diary entries, and media files.',
         }),
       });
@@ -393,11 +393,43 @@ export class GoogleAuthService {
         state.folderId = createData.id;
         StorageService.saveGoogleDriveState(state);
         return createData.id;
+      } else {
+        const errText = await createRes.text();
+        console.error('Google Drive folder creation failed:', createRes.status, errText);
       }
     } catch (e) {
       console.warn('Could not initialize Google Drive folder directly:', e);
     }
     return 'tasker-app-data-vault';
+  }
+
+  /**
+   * Ensures the visible `Tasker App Data` folder exists on Google Drive, creating it if needed.
+   */
+  static async ensureVisibleDriveFolder(): Promise<string | null> {
+    const state = this.getDriveState();
+    if (!state.accessToken) return null;
+    const folderId = await this.initDriveFolder(state.accessToken);
+    return folderId && folderId !== 'tasker-app-data-vault' ? folderId : null;
+  }
+
+  /**
+   * Opens the user's `Tasker App Data` folder in a new browser tab.
+   * Proactively verifies folder creation before opening.
+   */
+  static async openDriveFolderInNewTab(): Promise<void> {
+    const state = this.getDriveState();
+    let folderId = (state.folderId && state.folderId !== 'tasker-app-data-vault') ? state.folderId : null;
+
+    if (!folderId && state.accessToken) {
+      folderId = await this.initDriveFolder(state.accessToken);
+    }
+
+    if (folderId && folderId !== 'tasker-app-data-vault') {
+      window.open(`https://drive.google.com/drive/folders/${folderId}`, '_blank');
+    } else {
+      window.open('https://drive.google.com/drive/search?q=Tasker', '_blank');
+    }
   }
 
   /**

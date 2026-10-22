@@ -15,11 +15,13 @@ import {
   ShieldCheck,
   LogOut,
   Sun,
-  Moon
+  Moon,
+  FolderOpen
 } from 'lucide-react';
 import { format, parseISO, addDays, subDays } from 'date-fns';
 import { GoogleDriveState, AIProvider } from '../types';
 import { ThemeService, ThemeMode } from '../services/themeService';
+import { GoogleAuthService } from '../services/googleAuthService';
 
 interface NavbarProps {
   currentDate: string; // YYYY-MM-DD
@@ -221,6 +223,18 @@ export const Navbar: React.FC<NavbarProps> = ({
                 title={driveState.accessToken ? 'Google Drive Connected' : 'Browser Storage Only (Unsynced)'}
               />
             </button>
+
+            {/* Open Google Drive folder shortcut if connected */}
+            {driveState.accessToken && (
+              <button
+                onClick={() => GoogleAuthService.openDriveFolderInNewTab()}
+                className="px-2 py-1 rounded-lg bg-slate-700/80 hover:bg-slate-700 border border-slate-600/60 text-slate-200 hover:text-white text-[10px] font-bold flex items-center gap-1 transition"
+                title="Open Tasker App Data folder in Google Drive"
+              >
+                <FolderOpen className="w-3 h-3 text-indigo-400" />
+                <span className="hidden xl:inline">Drive</span>
+              </button>
+            )}
 
             {/* Attach Google Account CTA if not yet connected to Drive */}
             {!driveState.accessToken && onOpenAttachGoogle && (

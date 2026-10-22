@@ -212,7 +212,11 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
     try {
       const prompt = `Summarize this diary entry into 3-4 clear, insightful bullet points capturing key events, emotional reflections, and action items:\n\n${entry.content}`;
       const res = await AIBrokerService.completeText(prompt, 'You are an executive biographer and summarizer.');
-      const summaryText = res.text.trim();
+      const summaryText = res.text
+        .replace(/^```(?:markdown|text)?\n?/i, '')
+        .replace(/\n?```$/i, '')
+        .replace(/^[ \t]{4,}/gm, '')
+        .trim();
       
       const updated: DiaryEntry = {
         ...entry,
@@ -557,6 +561,17 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
           >
             <Paperclip className="w-3.5 h-3.5 text-slate-400" />
             <span>Files ({entry.attachments.length})</span>
+          </button>
+
+          {/* 📂 Open Tasker Folder in Google Drive */}
+          <button
+            type="button"
+            onClick={() => GoogleAuthService.openDriveFolderInNewTab()}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-semibold border border-slate-700 transition"
+            title="Open Tasker App Data folder in Google Drive (My Drive)"
+          >
+            <FolderOpen className="w-3.5 h-3.5 text-indigo-400" />
+            <span className="hidden md:inline">Drive Folder</span>
           </button>
 
           {/* 🔊 Text-to-Speech Read Aloud */}

@@ -309,13 +309,21 @@ export class AIBrokerService {
 
     // Check if the prompt explicitly requests deep text analysis or article critique
     const lowerPrompt = prompt.toLowerCase().trim();
+    const isEditorialTask = (systemInstruction || '').toLowerCase().includes('proofread') ||
+      (systemInstruction || '').toLowerCase().includes('polisher') ||
+      (systemInstruction || '').toLowerCase().includes('biographer') ||
+      (systemInstruction || '').toLowerCase().includes('diary companion') ||
+      (systemInstruction || '').toLowerCase().includes('summarizer') ||
+      (systemInstruction || '').toLowerCase().includes('translator');
+
     const isExplicitAnalysis =
-      lowerPrompt.includes('analyze') ||
-      lowerPrompt.includes('analysis') ||
-      lowerPrompt.includes('evaluate') ||
-      lowerPrompt.includes('critique') ||
-      lowerPrompt.includes('readability') ||
-      lowerPrompt.includes('deep semantic text analysis');
+      !isEditorialTask &&
+      (lowerPrompt.includes('analysis') ||
+       lowerPrompt.includes('critique') ||
+       lowerPrompt.includes('readability') ||
+       lowerPrompt.includes('deep semantic text analysis') ||
+       lowerPrompt.startsWith('analyze') ||
+       lowerPrompt.startsWith('evaluate'));
     const hasLongTextPassage = prompt.length > 120 && (prompt.includes('\n') || (prompt.match(/[.!?]/g) || []).length >= 2);
 
     if (isExplicitAnalysis && hasLongTextPassage) {
@@ -646,17 +654,28 @@ CRITICAL RULES:
 
     // 1. Try Live AI polishing and sentence reconstruction
     try {
-      const systemPrompt = `You are an expert biographer and text polisher for Tasker OS.
-The user wrote or dictated a daily journal entry.
-Perform thorough error correction and rewrite awkward spoken fragments into meaningful sentences:
-1. REMOVE DUPLICATE WORDS: Eliminate all speech-recognition stutter or repeated words (e.g. "hello hello hello" -> "hello", "I I I" -> "I", "today today" -> "today").
-2. POLISH INTO MEANINGFUL SENTENCES: Transform fragmented, run-on spoken thoughts into beautiful, well-punctuated, coherent sentences with natural paragraph breaks.
-3. FIX GRAMMAR & SPELLING: Correct all grammatical errors, typos, capitalization, and punctuation.
-4. PRESERVE INLINE MEDIA TAGS: You MUST strictly preserve all inline attachment tags unchanged: {{attachment:<id>}}, {{file:<id>}}, and ![caption](attachment:<id>). Do NOT modify or remove them.
-5. Return ONLY the final polished text without preambles, introductory chatter, or quotation marks.`;
+      const systemPrompt = `You are an expert biographer, proofreader, and sentence reconstruction editor for Tasker OS.
+The user wrote or voice-dictated a daily journal entry spanning one or more paragraphs.
+Your objective is to fix all mistakes and rewrite awkward spoken fragments into clear, eloquent, and meaningful sentences:
+1. ELIMINATE VOICE STUTTER: Remove all duplicate repeated words caused by speech dictation (e.g., "hello hello hello" -> "hello", "I I I" -> "I", "today today" -> "today").
+2. RECONSTRUCT COHERENT SENTENCES: Reorganize fragmented spoken thoughts into well-punctuated, meaningful sentences with proper grammar and natural cadence.
+3. FIX TYPOS & SPELLING: Correct all spelling mistakes, grammar errors, and punctuation flaws.
+4. PRESERVE PARAGRAPHS & STRUCTURE: Keep the user's authentic voice, multi-paragraph structure, and tone.
+5. PRESERVE ATTACHMENTS: Keep all {{attachment:<id>}}, {{file:<id>}}, and inline media markers strictly intact.
+6. NO CODE BLOCKS: Do NOT wrap the text in markdown code fences (\`\`\` or \`\`\`text), backticks, or indent paragraphs with 4 spaces. Output ONLY natural, beautiful paragraphs.
+7. Return ONLY the final polished text with no conversational preambles or explanations.`;
 
-      const res = await this.completeText(text, systemPrompt);
+      const prompt = `Please correct any errors, remove speech-recognition stutter repetitions, and rewrite the following diary paragraphs into clear, meaningful sentences. Maintain the exact paragraph separation:\n\n${text}`;
+
+      const res = await this.completeText(prompt, systemPrompt);
       let cleaned = res.text.trim();
+
+      // Clean off any accidental code fences or backticks emitted by the model
+      cleaned = cleaned
+        .replace(/^```(?:markdown|text)?\n?/i, '')
+        .replace(/\n?```$/i, '')
+        .replace(/^[ \t]{4,}/gm, '') // Remove 4-space markdown code block indentation
+        .trim();
 
       // Ensure attachment tags in original are preserved
       const attachmentTags = text.match(/\{\{(?:attachment|file):[a-zA-Z0-9_\-.:]+\}\}|!\[[^\]]*\]\(attachment:[a-zA-Z0-9_\-.:]+\)/g) || [];
@@ -666,8 +685,16 @@ Perform thorough error correction and rewrite awkward spoken fragments into mean
         }
       }
 
-      // If valid text returned that is not an offline error notice
-      if (cleaned.length > 5 && !cleaned.includes('I received your message regarding') && !cleaned.includes('⚠️ **No Active AI Provider Configured**')) {
+      // If valid text returned that is real polished prose
+      if (
+        cleaned.length > 5 &&
+        !cleaned.includes('I received your message regarding') &&
+        !cleaned.includes('⚠️ **No Active AI Provider Configured**') &&
+        !cleaned.startsWith('### 📑 Deep Semantic Text Analysis') &&
+        !cleaned.startsWith('### ⚖️ Comparison') &&
+        !cleaned.startsWith('Here is the corrected text:') &&
+        !cleaned.startsWith('Please provide the text')
+      ) {
         const fixes = Math.max(1, Math.abs(cleaned.length - text.length) + (cleaned !== text ? 1 : 0));
         return {
           correctedText: cleaned,
@@ -729,8 +756,13 @@ Return ONLY the direct translated text without any explanation, markdown backtic
     text: string,
     modelName: string
   ): { correctedText: string; fixesApplied: number; modelUsed: string } {
-    let output = text;
-    let fixes = 0;
+    if (!text || !text.trim()) {
+      return { correctedText: text, fixesApplied: 0, modelUsed: modelName };
+    }
+
+    // Split text into paragraphs so multi-paragraph structure (\n\n) is strictly preserved
+    const paragraphs = text.split(/\n\s*\n/);
+    let totalFixes = 0;
 
     // Common spelling & typing mistakes dictionary
     const replacements: Array<[RegExp, string]> = [
@@ -770,37 +802,49 @@ Return ONLY the direct translated text without any explanation, markdown backtic
       [/\bgonna\b/gi, 'going to'],
     ];
 
-    replacements.forEach(([pattern, replacement]) => {
-      const match = output.match(pattern);
-      if (match) {
-        fixes += match.length;
-        output = output.replace(pattern, replacement);
-      }
+    const correctedParagraphs = paragraphs.map((para) => {
+      let output = para.trim();
+      if (!output) return '';
+
+      replacements.forEach(([pattern, replacement]) => {
+        const match = output.match(pattern);
+        if (match) {
+          totalFixes += match.length;
+          output = output.replace(pattern, replacement);
+        }
+      });
+
+      // Fix punctuation spacing: "word ,word" -> "word, word"
+      output = output.replace(/\s+([,.;!?])/g, '$1');
+      output = output.replace(/([,.;!?])(?=[a-zA-Z])/g, '$1 ');
+
+      // Deduplicate repeated words: "the the" -> "the", "hello hello hello" -> "hello"
+      output = output.replace(/\b([a-zA-Z0-9_\u0C00-\u0C7F]+)(?:\s+\1\b)+/gi, (match, word) => {
+        const count = match.split(/\s+/).length - 1;
+        totalFixes += count;
+        return word;
+      });
+
+      // Capitalize first letter of each sentence
+      output = output.replace(/(^|[.!?]\s+)([a-z])/g, (_, prefix, letter) => {
+        totalFixes++;
+        return `${prefix}${letter.toUpperCase()}`;
+      });
+
+      // Collapse multi-spaces within lines
+      output = output.replace(/[ \t]{2,}/g, ' ');
+
+      // Strip any accidental 4-space indent that would trigger code block in markdown
+      output = output.replace(/^[ \t]{4,}/gm, '');
+
+      return output;
     });
 
-    // Fix punctuation spacing: "word ,word" -> "word, word"
-    output = output.replace(/\s+([,.;!?])/g, '$1');
-    output = output.replace(/([,.;!?])(?=[a-zA-Z])/g, '$1 ');
-
-    // Deduplicate repeated words: "the the" -> "the", "hello hello hello" -> "hello"
-    output = output.replace(/\b([a-zA-Z0-9_]+)(?:\s+\1\b)+/gi, (match, word) => {
-      const count = match.split(/\s+/).length - 1;
-      fixes += count;
-      return word;
-    });
-
-    // Fix lowercase at beginning of sentences
-    output = output.replace(/(^|[.!?]\s+)([a-z])/g, (_, prefix, letter) => {
-      fixes++;
-      return `${prefix}${letter.toUpperCase()}`;
-    });
-
-    // Collapse multi-spaces
-    output = output.replace(/[ \t]{2,}/g, ' ');
+    const finalOutput = correctedParagraphs.filter((p) => p.length > 0).join('\n\n');
 
     return {
-      correctedText: output,
-      fixesApplied: Math.max(fixes, 1),
+      correctedText: finalOutput,
+      fixesApplied: Math.max(totalFixes, 1),
       modelUsed: modelName,
     };
   }
@@ -961,33 +1005,129 @@ Return ONLY the direct translated text without any explanation, markdown backtic
     diaryEntry: { date: string; content: string; mood?: string },
     chatHistory: Array<{ sender: 'user' | 'assistant'; content: string }>
   ): Promise<{ responseText: string; modelUsed: string }> {
+    const cleanMsg = userMessage.trim();
+    const lower = cleanMsg.toLowerCase();
+    const isSummaryRequest =
+      lower.includes('summar') ||
+      lower.includes('recap') ||
+      lower.includes('reflection') ||
+      lower.includes('takeaway') ||
+      lower.includes('closing reflection') ||
+      lower.includes('review my day') ||
+      lower.includes('how was my day');
+
+    const tasksForDay = StorageService.getTasksForDate(diaryEntry.date);
+    const taskSummary = tasksForDay.length > 0
+      ? tasksForDay.map(t => `- [${t.status === 'done' ? 'Completed' : 'Pending'}] ${t.title}`).join('\n')
+      : 'No tasks scheduled for this day.';
+
+    const hasDiaryContent = !!(diaryEntry.content && diaryEntry.content.trim().length > 0);
+
+    // If user asked to summarize but hasn't written any diary text or tasks yet
+    if (isSummaryRequest && !hasDiaryContent && tasksForDay.length === 0) {
+      return {
+        responseText: `You haven't written any thoughts or recorded tasks in your diary for **${diaryEntry.date}** yet!\n\nOnce you write or voice-dictate your entry in the document canvas above, ask me again and I'll generate an insightful, personal summary and reflection for you.`,
+        modelUsed: 'Tasker Diary Companion',
+      };
+    }
+
     const historySnippet = chatHistory
       .slice(-8)
       .map(m => `${m.sender === 'user' ? 'User' : 'Diary AI Companion'}: ${m.content}`)
       .join('\n');
 
-    const tasksForDay = StorageService.getTasksForDate(diaryEntry.date);
-    const taskSummary = tasksForDay.map(t => `- [${t.status}] ${t.title}`).join('\n');
-
     const systemPrompt = `You are the user's empathetic, highly perceptive AI Diary Companion and Life Coach for date [${diaryEntry.date}].
-Your role is to help the user reflect deeply, unpack emotions, find clarity, celebrate wins, and brainstorm solutions.
+Your role is to help the user reflect deeply, unpack emotions, find clarity, celebrate wins, and summarize their day.
 
-CURRENT DIARY CONTENT FOR [${diaryEntry.date}]:
-${diaryEntry.content || '(No written entry yet)'}
+USER'S ACTUAL WRITTEN DIARY FOR [${diaryEntry.date}]:
+"""
+${hasDiaryContent ? diaryEntry.content : '(No written thoughts entered yet)'}
+"""
 Mood: ${diaryEntry.mood || 'neutral'}
 Tasks for this day:
-${taskSummary || 'No tasks scheduled.'}
+${taskSummary}
 
 RECENT CONVERSATION HISTORY:
 ${historySnippet || 'Conversation started.'}
 
-Be warm, personal, thoughtful, and insightful. Offer practical advice, encouragement, or reflective questions. Avoid generic robotic fluff.`;
+CRITICAL RULES:
+1. When asked to summarize or provide a reflection, base your answer STRICTLY on what the user actually wrote in their diary above and their tasks.
+2. Highlight real personal achievements, challenges, feelings, and progress from the diary.
+3. Be warm, personal, thoughtful, and inspiring. Never echo prompts or output generic placeholders.
+4. Output clean markdown. Never wrap your entire reply in code blocks.`;
 
-    const res = await this.completeText(userMessage, systemPrompt);
+    let effectivePrompt = userMessage;
+    if (isSummaryRequest) {
+      effectivePrompt = `Please summarize my journal entry and activities for today (${diaryEntry.date}). Reflect on what I accomplished, how I felt, and what I should focus on next based on my diary text:\n\n${hasDiaryContent ? diaryEntry.content : '(No written thoughts, only tasks)'}`;
+    }
+
+    const res = await this.completeText(effectivePrompt, systemPrompt);
+    let replyText = res.text.trim();
+
+    // Guard against generic echo if simulated engine was used
+    if (
+      isSummaryRequest &&
+      (replyText.includes('• Summarize my day into an inspiring closing reflection') ||
+       replyText.includes('I received your message regarding') ||
+       replyText.startsWith('### 📑 Deep Semantic Text Analysis'))
+    ) {
+      replyText = this.buildOfflineDiarySummary(diaryEntry, tasksForDay);
+    }
+
     return {
-      responseText: res.text,
+      responseText: replyText,
       modelUsed: res.modelUsed,
     };
+  }
+
+  /**
+   * Generates an authentic, structured diary summary from the user's real diary content and tasks
+   */
+  private static buildOfflineDiarySummary(
+    diaryEntry: { date: string; content: string; mood?: string },
+    tasksForDay: Array<{ title: string; status: string; priority: string }>
+  ): string {
+    const rawContent = diaryEntry.content?.trim() || '';
+    const cleanSentences = rawContent
+      .replace(/\{\{(?:attachment|file):[^}]+\}\}/g, '')
+      .split(/[.!?\n]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 8 && !s.toLowerCase().startsWith('summarize') && !s.toLowerCase().startsWith('please'));
+
+    const doneTasks = tasksForDay.filter(t => t.status === 'done');
+    const pendingTasks = tasksForDay.filter(t => t.status !== 'done');
+
+    let summary = `### 🌅 Daily Reflection & Summary (${diaryEntry.date})\n\n`;
+
+    if (cleanSentences.length > 0) {
+      summary += `#### 📖 Key Journal Reflections\n`;
+      summary += `• **Core Experience**: "${cleanSentences[0]}."\n`;
+      if (cleanSentences.length > 1) {
+        summary += `• **Notable Moment**: "${cleanSentences[1]}."\n`;
+      }
+      if (cleanSentences.length > 2) {
+        summary += `• **Key Thought**: "${cleanSentences[cleanSentences.length - 1]}."\n`;
+      }
+      summary += `\n`;
+    }
+
+    if (tasksForDay.length > 0) {
+      summary += `#### 🎯 Productivity & Progress\n`;
+      summary += `• **Completed**: ${doneTasks.length > 0 ? doneTasks.map(t => t.title).join(', ') : 'None marked done yet'}.\n`;
+      if (pendingTasks.length > 0) {
+        summary += `• **In Progress**: ${pendingTasks.slice(0, 3).map(t => t.title).join(', ')}.\n`;
+      }
+      summary += `\n`;
+    }
+
+    if (diaryEntry.mood) {
+      summary += `• **Recorded Mood**: ✨ **${diaryEntry.mood.toUpperCase()}**\n\n`;
+    }
+
+    summary += `#### 💡 Inspiring Closing Reflection\n`;
+    summary += `You made meaningful progress today. By capturing your thoughts and staying intentional with your daily goals, you are building lasting clarity and momentum. Rest well and bring your best energy tomorrow!`;
+
+    return summary;
   }
 
 
@@ -1281,15 +1421,31 @@ Offline capabilities ready now:
     }
 
     // 2. Summary request
-    if (lowerPrompt.includes('summarize this diary') || lowerPrompt.includes('3 concise bullet') || (lowerPrompt.startsWith('summarize') && prompt.length > 50)) {
-      const rawText = prompt.replace(/^[\s\S]*?bullet points:\s*/i, '').trim();
-      const sentences = rawText.split(/[.!?\n]+/).map(s => s.trim()).filter(s => s.length > 8);
+    if (lowerPrompt.includes('summarize this diary') || lowerPrompt.includes('3 concise bullet') || (lowerPrompt.startsWith('summarize') && prompt.length > 25)) {
+      // Extract the diary text passed inside the prompt
+      let textToSummarize = prompt
+        .replace(/^[\s\S]*?(?:diary entry|bullet points|diary text|here is what i wrote|diary content|based on my diary text)[:\s"]+/i, '')
+        .replace(/["']\s*$/, '')
+        .trim();
 
-      let bullet1 = sentences[0] || 'Reflected on daily accomplishments and key priorities.';
-      let bullet2 = sentences[1] || 'Maintained steady progress across active tasks and schedule.';
-      let bullet3 = sentences[2] || 'Prepared next steps and key focus areas for tomorrow.';
+      // If text wasn't prefixed with those markers, take the prompt after the first command line
+      if (!textToSummarize || textToSummarize.toLowerCase().startsWith('summarize')) {
+        const lines = prompt.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const nonCommandLines = lines.filter(l => !l.toLowerCase().startsWith('summarize') && !l.toLowerCase().startsWith('please'));
+        textToSummarize = nonCommandLines.join('. ');
+      }
 
-      const summaryText = `• ${bullet1}.\n• ${bullet2}.\n• ${bullet3}.`;
+      const sentences = textToSummarize
+        .replace(/\{\{(?:attachment|file):[^}]+\}\}/g, '')
+        .split(/[.!?\n]+/)
+        .map(s => s.trim())
+        .filter(s => s.length > 8 && !s.toLowerCase().startsWith('summarize') && !s.toLowerCase().startsWith('please'));
+
+      let bullet1 = sentences[0] || 'Reflected on daily accomplishments and key milestones.';
+      let bullet2 = sentences[1] || 'Maintained steady momentum across scheduled commitments.';
+      let bullet3 = sentences[2] || 'Organized next priorities and strategic focus for tomorrow.';
+
+      const summaryText = `• **Key Milestone**: ${bullet1.replace(/[.]+$/, '')}.\n• **Progress & Focus**: ${bullet2.replace(/[.]+$/, '')}.\n• **Next Horizon**: ${bullet3.replace(/[.]+$/, '')}.`;
       return Promise.resolve({
         text: summaryText,
         modelUsed: `${providerName} (Summarizer Engine)`,

@@ -183,8 +183,9 @@ export class FirebaseAuthService {
       StorageService.saveGoogleDriveState(driveState);
       GoogleAuthService.setAuthenticated(true);
 
-      // Trigger Drive sync if access token was granted
+      // Proactively create Tasker App Data folder in user's root Google Drive & sync vault
       if (accessToken) {
+        GoogleAuthService.initDriveFolder(accessToken).catch(() => {});
         GoogleAuthService.triggerDriveSync().catch(() => {});
       }
 
