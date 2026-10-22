@@ -30,8 +30,9 @@ declare global {
   }
 }
 
-// User's verified Google Cloud OAuth 2.0 Web Client ID
-const DEFAULT_GOOGLE_CLIENT_ID = '634475536724-0e7apq2ee7p3udvuktuldtip5g54t2ru.apps.googleusercontent.com';
+// User's verified Google Cloud OAuth 2.0 Web Client ID (from tested working production app)
+const DEFAULT_GOOGLE_CLIENT_ID = '541913243201-mjp27m8eubv53hm5dr78o8s89m9h89ua.apps.googleusercontent.com';
+const BACKUP_GOOGLE_CLIENT_ID = '634475536724-0e7apq2ee7p3udvuktuldtip5g54t2ru.apps.googleusercontent.com';
 const GOOGLE_AUTH_FLAG = 'tasker_google_authenticated_v2';
 const GOOGLE_CLIENT_ID_KEY = 'tasker_google_client_id_v2';
 
@@ -472,11 +473,19 @@ export class GoogleAuthService {
    * Makes the folder viewable so anyone with the link can see media files inside,
    * while private diary text and tasks are stored safely in hidden appDataFolder.
    */
+  /**
+   * Checks or creates the visible media folder in user's Google Drive.
+   * Based on proven architecture from TraceYourself production engine:
+   * - Searches directly for folder
+   * - Creates folder without explicit parents array so Drive v3 defaults cleanly to root without 404s
+   * - Applies reader permission so media is publicly viewable
+   */
   static async initDriveFolder(accessToken: string): Promise<string> {
     try {
-      // Search for existing Tasker App Data folder in My Drive
-      const query = encodeURIComponent("(name = 'Tasker App Data' or name = 'Tasker' or name = '📁 Tasker App Data') and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
-      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,parents)`, {
+      const folderName = 'Tasker_Media';
+      // Search for existing Tasker_Media or Tasker App Data folder in Drive
+      const query = encodeURIComponent(`(name='${folderName}' or name='Tasker App Data' or name='Tasker') and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+      const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
 
@@ -506,7 +515,7 @@ export class GoogleAuthService {
         }
       }
 
-      // Create new visible folder in user's Google Drive root
+      // Create new folder (omit parents so Drive v3 creates it in My Drive root without 404 'root' error)
       const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
         method: 'POST',
         headers: {
@@ -514,10 +523,9 @@ export class GoogleAuthService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          name: 'Tasker App Data',
+          name: folderName,
           mimeType: 'application/vnd.google-apps.folder',
-          parents: ['root'], // Explicitly in My Drive root so it's 100% visible to user
-          description: 'Autonomous Tasker OS public media vault. Attached photos, videos, and documents are visible here.',
+          description: 'Autonomous Tasker OS Media Vault. Photos, videos, and documents are visible here.',
         }),
       });
 
@@ -528,7 +536,7 @@ export class GoogleAuthService {
         state.folderId = folderId;
         StorageService.saveGoogleDriveState(state);
 
-        // Make folder public/reader so media inside is visible
+        // Make folder viewable so media inside can be viewed
         try {
           await fetch(`https://www.googleapis.com/drive/v3/files/${folderId}/permissions`, {
             method: 'POST',

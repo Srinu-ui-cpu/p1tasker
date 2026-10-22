@@ -32,7 +32,8 @@ export const DriveMediaViewerModal: React.FC<DriveMediaViewerModalProps> = ({
 
   const isImage = attachment.type.startsWith('image/');
   const isVideo = attachment.type.startsWith('video/');
-  const driveFileUrl = (attachment.driveId && !attachment.driveId.startsWith('file-'))
+  const hasValidDriveId = !!(attachment.driveId && !attachment.driveId.startsWith('file-') && /^[a-zA-Z0-9_-]{20,}$/.test(attachment.driveId));
+  const driveFileUrl = hasValidDriveId
     ? `https://drive.google.com/file/d/${attachment.driveId}/view`
     : GoogleAuthService.getDriveFolderUrl();
 
@@ -110,9 +111,18 @@ export const DriveMediaViewerModal: React.FC<DriveMediaViewerModalProps> = ({
           </div>
         </div>
 
-        {/* Media Preview Body */}
-        <div className="flex-1 overflow-auto p-4 sm:p-6 bg-slate-950 flex items-center justify-center min-h-[300px]">
-          {isImage && attachment.dataUrl ? (
+        {/* Media Preview Body (Google Drive Streaming Lightbox) */}
+        <div className="flex-1 overflow-hidden p-2 sm:p-4 bg-slate-950 flex items-center justify-center min-h-[400px]">
+          {hasValidDriveId ? (
+            <div className="w-full h-[65vh] rounded-2xl overflow-hidden border border-slate-800 bg-slate-900 shadow-2xl relative">
+              <iframe
+                src={`https://drive.google.com/file/d/${attachment.driveId}/preview`}
+                allow="autoplay"
+                className="w-full h-full border-0 rounded-2xl"
+                title={attachment.name}
+              />
+            </div>
+          ) : isImage && attachment.dataUrl ? (
             <div className="relative max-w-full max-h-[60vh] flex items-center justify-center rounded-2xl overflow-hidden border border-slate-800 bg-slate-900/60 p-2">
               <img 
                 src={attachment.dataUrl} 
@@ -133,7 +143,7 @@ export const DriveMediaViewerModal: React.FC<DriveMediaViewerModalProps> = ({
                   {(attachment.size / (1024 * 1024)).toFixed(1)} MB &bull; High-Definition Media
                 </p>
                 <p className="text-xs text-slate-400 mt-2">
-                  Uploaded directly to your public Google Drive media vault. Tap below to stream with full controls.
+                  Uploaded to your Google Drive media vault. Tap below to stream directly.
                 </p>
               </div>
               <div className="flex items-center justify-center gap-3">
