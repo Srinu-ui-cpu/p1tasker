@@ -129,10 +129,11 @@ export class FirebaseAuthService {
     }
 
     const provider = new GoogleAuthProvider();
-    // Request Drive file access and profile scopes
+    // Request Drive file access, appdata and profile scopes
     provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
     provider.addScope('https://www.googleapis.com/auth/userinfo.email');
     provider.addScope('https://www.googleapis.com/auth/drive.file');
+    provider.addScope('https://www.googleapis.com/auth/drive.appdata');
 
     provider.setCustomParameters({
       prompt: 'select_account',
@@ -157,8 +158,10 @@ export class FirebaseAuthService {
       driveState.userName = userName;
       driveState.userAvatar = userAvatar;
       driveState.activeStorageAccountEmail = userEmail;
+      driveState.lastSyncedAt = new Date().toISOString();
       if (accessToken) {
         driveState.accessToken = accessToken;
+        driveState.tokenExpiresAt = Date.now() + 3600 * 1000;
       }
 
       // Add to linked accounts if not already present
@@ -169,6 +172,8 @@ export class FirebaseAuthService {
           name: userName,
           email: userEmail,
           avatarUrl: userAvatar,
+          accessToken: accessToken,
+          tokenExpiresAt: Date.now() + 3600 * 1000,
           isPrimary: true,
           addedAt: new Date().toISOString(),
           isActiveStorage: true,
@@ -176,6 +181,10 @@ export class FirebaseAuthService {
       } else {
         existingAccount.avatarUrl = userAvatar;
         existingAccount.name = userName;
+        if (accessToken) {
+          existingAccount.accessToken = accessToken;
+          existingAccount.tokenExpiresAt = Date.now() + 3600 * 1000;
+        }
       }
 
       // Save drive state and mark as authenticated
@@ -183,9 +192,14 @@ export class FirebaseAuthService {
       StorageService.saveGoogleDriveState(driveState);
       GoogleAuthService.setAuthenticated(true);
 
-      // Proactively create Tasker App Data folder in user's root Google Drive & sync vault
+      // Proactively create Tasker_Media folder in user's root Google Drive & sync vault
       if (accessToken) {
-        GoogleAuthService.initDriveFolder(accessToken).catch(() => {});
+        try {
+          const folderId = await GoogleAuthService.initDriveFolder(accessToken);
+          console.log('Firebase Auth -> Created Google Drive Media Folder:', folderId);
+        } catch (folderErr) {
+          console.warn('Firebase Auth folder initialization:', folderErr);
+        }
         GoogleAuthService.triggerDriveSync().catch(() => {});
       }
 

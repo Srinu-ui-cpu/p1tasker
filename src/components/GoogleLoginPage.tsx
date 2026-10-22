@@ -9,9 +9,11 @@ import {
   RotateCcw,
   Cloud,
   CheckCircle2,
-  FolderOpen
+  FolderOpen,
+  Sparkles
 } from 'lucide-react';
 import { GoogleAuthService } from '../services/googleAuthService';
+import { FirebaseAuthService } from '../services/firebaseAuthService';
 
 interface GoogleLoginPageProps {
   onLoginSuccess: () => void;
@@ -25,22 +27,22 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
   const [showConfig, setShowConfig] = useState(false);
   const [customClientId, setCustomClientId] = useState(() => GoogleAuthService.getClientId());
 
-  // Pure Google Identity Services OAuth (Identical to TraceYourself engine)
+  // Firebase Google Sign-In with Google Drive Scopes (Bypasses Google Origin Authorization Error)
   const handleGoogleSignIn = async () => {
     setIsSubmitting(true);
     setErrorMessage(null);
-    setSuccessStatus('Connecting to Google Identity Services...');
+    setSuccessStatus('Connecting with Google via Firebase Authentication...');
 
     try {
-      setSuccessStatus('Requesting Google Account & Google Drive permissions...');
-      const account = await GoogleAuthService.requestRealGoogleOAuth(customClientId.trim() || undefined);
+      setSuccessStatus('Signing in & requesting Google Drive permissions...');
+      const { user, accessToken } = await FirebaseAuthService.signInWithGoogle();
 
-      setSuccessStatus(`Authenticated as ${account.email}! Initializing Google Drive Media folder...`);
+      setSuccessStatus(`Authenticated as ${user.email}! Initializing Google Drive Media folder...`);
       
       // Proactively create/verify Tasker_Media folder in My Drive
-      if (account.accessToken) {
+      if (accessToken) {
         try {
-          const folderId = await GoogleAuthService.initDriveFolder(account.accessToken);
+          const folderId = await GoogleAuthService.initDriveFolder(accessToken);
           console.log('Tasker Google Drive media folder ready:', folderId);
         } catch (folderErr) {
           console.warn('Initial drive folder notification:', folderErr);
@@ -56,10 +58,30 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
       const error = err as Error;
       setIsSubmitting(false);
       setSuccessStatus(null);
-      console.error('Sign-in error:', error);
+      console.error('Firebase sign-in error:', error);
       setErrorMessage(
         error.message || 'Google Sign-In was cancelled or failed. Please ensure popups are allowed.'
       );
+    }
+  };
+
+  // Direct Google Identity Services (GIS) fallback if desired
+  const handleGISFallback = async () => {
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setSuccessStatus('Connecting directly via Google Identity Services...');
+
+    try {
+      const account = await GoogleAuthService.requestRealGoogleOAuth(customClientId.trim() || undefined);
+      if (account.accessToken) {
+        await GoogleAuthService.initDriveFolder(account.accessToken).catch(() => {});
+      }
+      setIsSubmitting(false);
+      onLoginSuccess();
+    } catch (err: unknown) {
+      setIsSubmitting(false);
+      setSuccessStatus(null);
+      setErrorMessage((err as Error).message);
     }
   };
 
@@ -170,11 +192,24 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
           <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 text-[11px] text-slate-300 space-y-1.5">
             <div className="flex items-center gap-1.5 text-indigo-400 font-semibold">
               <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <span>Real Google Drive Cloud Integration</span>
+              <span>Real Google Drive Cloud Integration (Firebase Auth)</span>
             </div>
             <p className="leading-relaxed text-slate-400">
               When prompted, please allow Google Drive access. Tasker will automatically create a public <strong className="text-slate-200">Tasker_Media</strong> folder in your root My Drive for your photos, videos, and attachments.
             </p>
+          </div>
+
+          {/* Alternative Direct GIS option */}
+          <div className="text-center pt-1">
+            <button
+              type="button"
+              onClick={handleGISFallback}
+              disabled={isSubmitting}
+              className="text-[11px] text-slate-400 hover:text-indigo-300 underline transition"
+              title="Direct Google Identity Services authorization"
+            >
+              Alternative: Sign in via Google Identity Services (GIS)
+            </button>
           </div>
         </div>
 
