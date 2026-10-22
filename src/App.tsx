@@ -87,6 +87,7 @@ export function App() {
   useEffect(() => {
     ThemeService.initTheme();
     AlarmService.startScheduler();
+    GoogleAuthService.startPerpetualTokenManager();
     const unsubscribe = AlarmService.onAlarm((trigger) => {
       setActiveAlarm(trigger);
     });

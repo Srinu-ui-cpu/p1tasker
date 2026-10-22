@@ -137,29 +137,31 @@ export interface GoogleAccount {
   isPrimary?: boolean;
 }
 
-export interface TokenSlot {
-  token: string;
-  issuedAt: number;
-  expiresAt: number;
+export interface UploadProgress {
+  loaded: number;
+  total: number;
+  percent: number;
+  status: 'initiating' | 'uploading' | 'finalizing' | 'completed' | 'error';
+  speed?: string;
+  errorMessage?: string;
 }
 
 export interface GoogleDriveState {
   isConnected: boolean;
   clientId?: string;
   accessToken?: string;
+  secondaryToken?: string;
+  tokenExpiresAt?: number;
+  secondaryTokenExpiresAt?: number;
+  lastRotatedAt?: string;
   userEmail?: string;
   userName?: string;
   userAvatar?: string;
   folderId?: string;
-  isFolderPublic?: boolean;
   lastSyncedAt?: string;
   isSyncing: boolean;
   accounts: GoogleAccount[];
   activeStorageAccountEmail?: string;
-  // Dual-token rotating refresh engine
-  tokenA?: TokenSlot;
-  tokenB?: TokenSlot;
-  activeSlot?: 'A' | 'B';
 }
 
 export interface EncryptedBackupBundle {

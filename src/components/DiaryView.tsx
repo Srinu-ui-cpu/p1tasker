@@ -18,6 +18,7 @@ import {
   Bot, 
   Check, 
   X,
+  Loader2,
   ExternalLink,
   Eye,
   Maximize2,
@@ -32,7 +33,7 @@ import { DiaryEntry, FileAttachment } from '../types';
 import { StorageService } from '../services/storageService';
 import { SpeechService } from '../services/speechService';
 import { AIBrokerService } from '../services/aiBrokerService';
-import { GoogleAuthService, UploadProgressInfo } from '../services/googleAuthService';
+import { GoogleAuthService } from '../services/googleAuthService';
 import { DiaryAIChatModal } from './DiaryAIChatModal';
 import { DriveMediaViewerModal } from './DriveMediaViewerModal';
 import { WordDocumentCanvas, parseDocumentContent } from './WordDocumentCanvas';
@@ -77,6 +78,22 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
   const [translationResult, setTranslationResult] = useState<string | null>(null);
   const [showTranslateModal, setShowTranslateModal] = useState(false);
 
+  // Google Drive 2-second typing auto-sync state
+  const typingSyncTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [driveSyncStatus, setDriveSyncStatus] = useState<'idle' | 'typing' | 'syncing' | 'synced' | 'error'>('idle');
+
+  // Direct Resumable Upload Progress state (for files of any size, e.g. 2GB movies)
+  const [uploadProgress, setUploadProgress] = useState<{
+    active: boolean;
+    filename: string;
+    size: number;
+    loaded: number;
+    total: number;
+    percent: number;
+    speed?: string;
+    status: string;
+  } | null>(null);
+
   // AI Summary State
   const [summaryResult, setSummaryResult] = useState<string | null>(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
@@ -108,22 +125,9 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
     { code: 'ar-SA', label: 'Arabic' },
   ];
 
-  // Real-time Resumable Google Drive Direct Upload Progress
-  const [uploadProgress, setUploadProgress] = useState<UploadProgressInfo | null>(null);
-
-  // 2-Second Google Drive Auto-Sync Debounce Engine
-  const autoSyncTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [syncBadge, setSyncBadge] = useState<{ status: 'idle' | 'typing' | 'syncing' | 'synced'; text?: string }>({ status: 'idle' });
-
   useEffect(() => {
     setEntry(StorageService.getDiaryForDate(currentDate));
   }, [currentDate]);
-
-  useEffect(() => {
-    return () => {
-      if (autoSyncTimerRef.current) clearTimeout(autoSyncTimerRef.current);
-    };
-  }, []);
 
   const parsedDate = parseISO(currentDate);
 
@@ -149,27 +153,26 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
     };
     setEntry(updated);
     StorageService.saveDiaryForDate(updated);
-    setSyncBadge({ status: 'typing', text: 'Auto-sync in 2s...' });
 
-    // Debounced Google Drive sync: strictly triggers 2 seconds after user stops typing
-    if (autoSyncTimerRef.current) {
-      clearTimeout(autoSyncTimerRef.current);
+    // Debounce auto-sync with Google Drive 2 seconds after user stops typing
+    if (typingSyncTimerRef.current) {
+      clearTimeout(typingSyncTimerRef.current);
     }
-    autoSyncTimerRef.current = setTimeout(async () => {
-      if (GoogleAuthService.isAuthenticated()) {
-        setSyncBadge({ status: 'syncing', text: 'Syncing to Drive...' });
+    if (GoogleAuthService.isAuthenticated()) {
+      setDriveSyncStatus('typing');
+      typingSyncTimerRef.current = setTimeout(async () => {
+        setDriveSyncStatus('syncing');
         try {
-          await GoogleAuthService.triggerDriveSync();
-          setSyncBadge({ status: 'synced', text: 'Google Drive Synced' });
-          setTimeout(() => setSyncBadge({ status: 'idle' }), 3000);
+          const ok = await GoogleAuthService.triggerDriveSync();
+          setDriveSyncStatus(ok ? 'synced' : 'idle');
+          if (ok) {
+            setTimeout(() => setDriveSyncStatus('idle'), 3000);
+          }
         } catch {
-          setSyncBadge({ status: 'idle' });
+          setDriveSyncStatus('error');
         }
-      } else {
-        setSyncBadge({ status: 'synced', text: 'Saved locally' });
-        setTimeout(() => setSyncBadge({ status: 'idle' }), 2000);
-      }
-    }, 2000);
+      }, 2000);
+    }
   };
 
   // --- 🎙️ MULTILINGUAL VOICE DICTATION (WITH CONTINUOUS STUTTER DEDUPLICATION) ---
@@ -311,7 +314,49 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
   // --- 📎 ATTACH FILE / INLINE MEDIA INSERTION ---
   const handleInsertMediaFile = async (file: File, insertAfterIndex?: number) => {
     try {
+      let driveUploaded: { fileId: string; webViewLink?: string } | null = null;
+
+      // Direct Resumable Google Drive Upload with live Progress Bar
+      if (GoogleAuthService.isAuthenticated()) {
+        setUploadProgress({
+          active: true,
+          filename: file.name,
+          size: file.size,
+          loaded: 0,
+          total: file.size,
+          percent: 0,
+          status: 'Starting direct upload to Google Drive...',
+        });
+
+        try {
+          driveUploaded = await GoogleAuthService.uploadMediaFileResumable(file, (prog) => {
+            setUploadProgress({
+              active: true,
+              filename: file.name,
+              size: file.size,
+              loaded: prog.loaded,
+              total: prog.total,
+              percent: prog.percent,
+              speed: prog.speed,
+              status: prog.status === 'initiating'
+                ? 'Connecting to Google Drive...'
+                : prog.status === 'completed'
+                ? 'Upload complete! Finalizing in Drive...'
+                : `Uploading directly to Google Drive (${prog.speed || ''})...`,
+            });
+          });
+        } catch (uploadErr: unknown) {
+          const err = uploadErr as Error;
+          setAiNotification(`Drive upload notice: ${err.message}`);
+        } finally {
+          setTimeout(() => setUploadProgress(null), 1200);
+        }
+      }
+
       const { attachment } = await StorageService.attachFileToDate(file, currentDate);
+      if (driveUploaded?.fileId) {
+        attachment.driveId = driveUploaded.fileId;
+      }
 
       // Splicing inline tag {{attachment:<id>}} at cursor position, after block, or appending
       let newContent = entry.content;
@@ -344,57 +389,22 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
       };
       setEntry(updated);
       StorageService.saveDiaryForDate(updated);
-      setAiNotification(`✨ Attached "${file.name}" to diary!`);
+
+      if (driveUploaded?.fileId) {
+        setAiNotification(`✓ Uploaded "${file.name}" directly to Google Drive!`);
+      } else {
+        setAiNotification(`Attached "${file.name}" to diary!`);
+      }
       setTimeout(() => setAiNotification(null), 3500);
 
-      // Direct Resumable Upload to Google Drive with Real-time Progress Bar
+      // Trigger background sync for private vault
       if (GoogleAuthService.isAuthenticated()) {
-        setUploadProgress({
-          filename: file.name,
-          bytesUploaded: 0,
-          totalBytes: file.size,
-          percentage: 0,
-          status: 'starting',
-        });
-
-        GoogleAuthService.uploadMediaFileResumable(
-          file,
-          file.name,
-          file.type,
-          (prog) => {
-            setUploadProgress({ ...prog });
-          }
-        ).then((uploaded) => {
-          if (uploaded?.fileId) {
-            setEntry((prev) => {
-              const updatedAttachments = prev.attachments.map((a) =>
-                a.id === attachment.id ? { ...a, driveId: uploaded.fileId } : a
-              );
-              const withDriveId = { ...prev, attachments: updatedAttachments };
-              StorageService.saveDiaryForDate(withDriveId);
-              return withDriveId;
-            });
-            setTimeout(() => setUploadProgress(null), 3000);
-          } else {
-            setTimeout(() => setUploadProgress(null), 4000);
-          }
-        }).catch((err) => {
-          setUploadProgress({
-            filename: file.name,
-            bytesUploaded: 0,
-            totalBytes: file.size,
-            percentage: 0,
-            status: 'error',
-            error: err.message || 'Direct upload failed',
-          });
-          setTimeout(() => setUploadProgress(null), 4000);
-        });
-
         GoogleAuthService.triggerDriveSync().catch(() => {});
       }
     } catch (err: unknown) {
       const error = err as Error;
-      setAiNotification(`Attachment error: ${error.message || 'Saved locally'}`);
+      setUploadProgress(null);
+      setAiNotification(`Attachment notice: ${error.message || 'Saved locally'}`);
       setTimeout(() => setAiNotification(null), 4000);
     }
   };
@@ -505,20 +515,29 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
           <div className="hidden sm:flex items-center gap-2 text-slate-400 text-xs font-mono">
             <span>{wordCount} words</span>
             <span>&bull;</span>
-            {syncBadge.status === 'typing' ? (
+            {driveSyncStatus === 'typing' ? (
               <span className="text-amber-400 font-semibold flex items-center gap-1.5 animate-pulse">
-                <span className="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>
-                <span>Auto-sync in 2s...</span>
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <span>Typing (syncs in 2s)...</span>
               </span>
-            ) : syncBadge.status === 'syncing' ? (
-              <span className="text-sky-400 font-semibold flex items-center gap-1.5">
-                <Cloud className="w-3.5 h-3.5 animate-bounce text-sky-400" />
+            ) : driveSyncStatus === 'syncing' ? (
+              <span className="text-indigo-400 font-semibold flex items-center gap-1.5">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>Syncing to Google Drive...</span>
               </span>
-            ) : (
+            ) : driveSyncStatus === 'synced' ? (
               <span className="text-emerald-400 font-semibold flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{syncBadge.text || 'Google Drive Synced'}</span>
+                <Check className="w-3.5 h-3.5" />
+                <span>Saved to Drive</span>
+              </span>
+            ) : driveSyncStatus === 'error' ? (
+              <span className="text-rose-400 font-semibold flex items-center gap-1.5">
+                <Cloud className="w-3.5 h-3.5" />
+                <span>Sync retry queued</span>
+              </span>
+            ) : (
+              <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                <Check className="w-3 h-3" /> Auto-saved
               </span>
             )}
           </div>
@@ -1016,63 +1035,43 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
         </div>
       )}
 
-      {/* 🚀 Real-time Google Drive Direct Upload Progress Bar */}
-      {uploadProgress && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-slate-900/95 border border-indigo-500/40 rounded-2xl p-4 shadow-2xl backdrop-blur-md animate-fade-in text-white space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              {uploadProgress.status === 'completed' ? (
-                <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
-                  <CheckCircle2 className="w-5 h-5" />
+      {/* 6. Direct Resumable Google Drive Upload Progress Modal */}
+      {uploadProgress?.active && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-fade-in">
+          <div className="max-w-md w-full bg-slate-900 border border-indigo-500/50 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-3 rounded-2xl bg-indigo-950 text-indigo-400 border border-indigo-800 shrink-0 animate-pulse">
+                  <Cloud className="w-6 h-6" />
                 </div>
-              ) : uploadProgress.status === 'error' ? (
-                <div className="p-2 bg-rose-500/20 text-rose-400 rounded-xl">
-                  <X className="w-5 h-5" />
+                <div className="min-w-0">
+                  <h4 className="font-bold text-sm text-white truncate max-w-[220px]" title={uploadProgress.filename}>
+                    {uploadProgress.filename}
+                  </h4>
+                  <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                    {(uploadProgress.size / (1024 * 1024)).toFixed(1)} MB &bull; Direct Google Drive Upload
+                  </p>
                 </div>
-              ) : (
-                <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl animate-pulse">
-                  <Cloud className="w-5 h-5" />
-                </div>
-              )}
-              <div className="min-w-0">
-                <p className="text-xs font-bold truncate text-white">{uploadProgress.filename}</p>
-                <p className="text-[11px] text-slate-400">
-                  {uploadProgress.status === 'completed'
-                    ? 'Uploaded directly to Google Drive!'
-                    : uploadProgress.status === 'error'
-                    ? (uploadProgress.error || 'Upload failed')
-                    : `Streaming to Google Drive • ${uploadProgress.percentage}%`}
-                </p>
               </div>
+              <span className="text-base font-mono font-extrabold text-indigo-400 shrink-0">
+                {uploadProgress.percent}%
+              </span>
             </div>
-            <button
-              onClick={() => setUploadProgress(null)}
-              className="text-slate-400 hover:text-white p-1 rounded-lg"
-              title="Close notification"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
 
-          {/* Progress Track */}
-          <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden border border-slate-700">
-            <div
-              className={`h-full transition-all duration-300 rounded-full ${
-                uploadProgress.status === 'completed'
-                  ? 'bg-emerald-500'
-                  : uploadProgress.status === 'error'
-                  ? 'bg-rose-500'
-                  : 'bg-gradient-to-r from-indigo-500 via-sky-400 to-indigo-400'
-              }`}
-              style={{ width: `${uploadProgress.percentage}%` }}
-            />
-          </div>
+            {/* Live Progress Bar */}
+            <div className="w-full bg-slate-800 rounded-full h-3 overflow-hidden p-0.5 border border-slate-700">
+              <div 
+                className="bg-gradient-to-r from-indigo-500 via-purple-500 to-emerald-400 h-full rounded-full transition-all duration-300"
+                style={{ width: `${Math.max(4, uploadProgress.percent)}%` }}
+              />
+            </div>
 
-          <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
-            <span>
-              {(uploadProgress.bytesUploaded / (1024 * 1024)).toFixed(1)} MB / {(uploadProgress.totalBytes / (1024 * 1024)).toFixed(1)} MB
-            </span>
-            <span className="font-bold text-indigo-300">{uploadProgress.percentage}%</span>
+            <div className="flex items-center justify-between text-xs text-slate-400 font-mono">
+              <span className="truncate max-w-[240px]">{uploadProgress.status}</span>
+              {uploadProgress.speed && (
+                <span className="text-indigo-300 font-semibold shrink-0">{uploadProgress.speed}</span>
+              )}
+            </div>
           </div>
         </div>
       )}

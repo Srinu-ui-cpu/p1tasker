@@ -203,13 +203,14 @@ export class StorageService {
   }
 
   /**
-   * Generates a lightweight, compact preview thumbnail URL for image files (<60KB)
+   * Generates a lightweight, compact preview thumbnail URL for image files (<5MB)
    * to guarantee zero localStorage quota exceptions while displaying crisp thumbnails.
-   * For non-images or large files (>10MB), returns empty string to prevent memory and quota crashes.
+   * For non-images or large files (like a 2GB video/movie), returns empty string
+   * so localStorage quota is NEVER exceeded.
    */
   static async createOptimizedPreviewUrl(file: File): Promise<string> {
-    // Strictly skip non-image files or files > 10MB (videos, movies, large PDFs)
-    if (!file.type.startsWith('image/') || file.size > 10 * 1024 * 1024) {
+    // Large files or non-images must NEVER be converted to base64 for localStorage
+    if (!file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) {
       return '';
     }
 
@@ -251,7 +252,9 @@ export class StorageService {
         resolve(img.src);
       };
 
-      img.onerror = () => resolve('');
+      img.onerror = () => {
+        resolve('');
+      };
 
       reader.readAsDataURL(file);
     });
@@ -267,23 +270,24 @@ export class StorageService {
   }
 
   /**
-   * Computes a resilient file hash for files of ANY size (including 2GB+ movies)
-   * without allocating multi-gigabyte memory buffers in the browser.
+   * Computes a resilient content hash for any file.
+   * For large files (e.g. 2GB movies), samples chunk slices without loading gigabytes into RAM.
    */
   static async computeFileHash(file: File): Promise<string> {
     if (file.size <= 10 * 1024 * 1024) {
       const buffer = await file.arrayBuffer();
       return this.computeSHA256(buffer);
     }
-    // For large files (>10MB up to multi-GB), slice head (2MB) + tail (2MB) + file metadata
-    // Runs in <15ms without memory bloat or tab crashes
-    const headSlice = await file.slice(0, 2 * 1024 * 1024).arrayBuffer();
-    const tailSlice = await file.slice(Math.max(0, file.size - 2 * 1024 * 1024)).arrayBuffer();
-    const metaBytes = new TextEncoder().encode(`:${file.size}:${file.name}:${file.lastModified}`);
-    const combined = new Uint8Array(headSlice.byteLength + tailSlice.byteLength + metaBytes.length);
-    combined.set(new Uint8Array(headSlice), 0);
-    combined.set(new Uint8Array(tailSlice), headSlice.byteLength);
-    combined.set(metaBytes, headSlice.byteLength + tailSlice.byteLength);
+    // High-performance chunked sampling for large files (movies, large videos, ISOs)
+    const sliceStart = file.slice(0, 2 * 1024 * 1024);
+    const sliceEnd = file.slice(Math.max(0, file.size - 2 * 1024 * 1024));
+    const [bufStart, bufEnd] = await Promise.all([sliceStart.arrayBuffer(), sliceEnd.arrayBuffer()]);
+    const metaString = `${file.name}-${file.size}-${file.lastModified}`;
+    const enc = new TextEncoder().encode(metaString);
+    const combined = new Uint8Array(bufStart.byteLength + bufEnd.byteLength + enc.byteLength);
+    combined.set(new Uint8Array(bufStart), 0);
+    combined.set(new Uint8Array(bufEnd), bufStart.byteLength);
+    combined.set(enc, bufStart.byteLength + bufEnd.byteLength);
     return this.computeSHA256(combined.buffer);
   }
 
@@ -311,7 +315,7 @@ export class StorageService {
     const hash = await this.computeFileHash(file);
     const registry = this.getFileRegistry();
 
-    // Convert file to optimized data URL for compact thumbnail display (images only)
+    // Convert file to optimized data URL for compact thumbnail display
     const dataUrl = await this.createOptimizedPreviewUrl(file);
 
     const isDuplicate = !!registry[hash];

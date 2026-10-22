@@ -1374,6 +1374,80 @@ End of meeting notes.`;
     assert(typeof (GoogleAuthService as any).ensureVisibleDriveFolder === 'function', 'ensureVisibleDriveFolder exists');
     assert(typeof (GoogleAuthService as any).openDriveFolderInNewTab === 'function', 'openDriveFolderInNewTab exists');
   });
+
+  console.log('\n>> Running Suite 15: Dual-Token Rotation, Public Drive Folder, & Resumable Uploads');
+
+  await runTest('TokenRotation', 'Perpetual Dual-Token Rotation swaps to standby token before expiry', async () => {
+    const state = GoogleAuthService.getDriveState();
+    state.accessToken = 'primary-token-123';
+    state.secondaryToken = 'standby-token-456';
+    state.tokenExpiresAt = Date.now() + 60 * 1000; // 1 min left (< 2 min threshold)
+    state.secondaryTokenExpiresAt = Date.now() + 3600 * 1000;
+    state.lastRotatedAt = new Date().toISOString();
+    StorageService.saveGoogleDriveState(state);
+
+    const activeToken = GoogleAuthService.getActiveToken();
+    assertEquals(activeToken, 'standby-token-456', 'Active token should rotate to secondary token');
+
+    assert(typeof (GoogleAuthService as any).rotateTokens === 'function', 'rotateTokens exists');
+    assert(typeof (GoogleAuthService as any).startPerpetualTokenManager === 'function', 'startPerpetualTokenManager exists');
+  });
+
+  await runTest('SafeLargeFileHandling', 'StorageService handles large files (e.g. 2GB video) without crashing memory or localStorage', async () => {
+    // Create a mock large video file (2GB) using Blob slice polyfill
+    const mockBigFile = new File(['mock video content chunk'], 'vacation_movie_2026.mp4', { type: 'video/mp4' });
+    Object.defineProperty(mockBigFile, 'size', { value: 2 * 1024 * 1024 * 1024 }); // 2 GB
+
+    // 1. Chunked hash calculation must succeed without OutOfMemory error
+    const hash = await StorageService.computeFileHash(mockBigFile);
+    assert(typeof hash === 'string' && hash.length === 64, 'Must compute 64-character SHA-256 hash');
+
+    // 2. Large video must return empty preview URL so localStorage quota is protected
+    const previewUrl = await StorageService.createOptimizedPreviewUrl(mockBigFile);
+    assertEquals(previewUrl, '', 'Large video preview URL must be empty to avoid localStorage quota crash');
+
+    // 3. Process and deduplicate must safely create attachment
+    const { attachment } = await StorageService.attachFileToDate(mockBigFile, '2026-10-22');
+    assertEquals(attachment.name, 'vacation_movie_2026.mp4', 'Attachment name matches');
+    assertEquals(attachment.size, 2 * 1024 * 1024 * 1024, 'Attachment size is 2GB');
+  });
+
+  await runTest('PublicDriveFolderPermissions', 'initDriveFolder grants reader permissions to make folder public for media viewing', async () => {
+    const originalFetch = globalThis.fetch;
+    let permissionsGranted = false;
+
+    (globalThis as any).fetch = async (url: string, options: any) => {
+      if (url.includes('/drive/v3/files?q=')) {
+        return new Response(JSON.stringify({ files: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (url === 'https://www.googleapis.com/drive/v3/files' && options?.method === 'POST') {
+        return new Response(JSON.stringify({ id: 'public-folder-123456789012345', name: 'Tasker App Data' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url.includes('/permissions') && options?.method === 'POST') {
+        const body = JSON.parse(options.body);
+        if (body.role === 'reader' && body.type === 'anyone') {
+          permissionsGranted = true;
+        }
+        return new Response('{}', { status: 200 });
+      }
+      return new Response('{}', { status: 200 });
+    };
+
+    try {
+      const folderId = await GoogleAuthService.initDriveFolder('test-oauth-token');
+      assertEquals(folderId, 'public-folder-123456789012345', 'Folder ID matches');
+      assert(permissionsGranted, 'Public reader permission must be assigned to folder for media visibility');
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
+  });
+
+  await runTest('ResumableUploadProtocol', 'GoogleAuthService exports uploadMediaFileResumable for chunked streaming', () => {
+    assert(typeof (GoogleAuthService as any).uploadMediaFileResumable === 'function', 'uploadMediaFileResumable exists');
+  });
   console.log('\n===============================================================');
   console.log('                 AUDIT EXECUTION RESULTS');
   console.log('===============================================================');
