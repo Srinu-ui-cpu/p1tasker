@@ -786,6 +786,34 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
         </div>
       )}
 
+      {/* Google Cloud API Disabled Action Banner */}
+      {entry.attachments.some(a => a.uploadError?.includes('616794995226') || a.uploadError?.includes('SERVICE_DISABLED') || a.uploadError?.includes('Google Drive API has not been used')) && (
+        <div className="p-4 bg-amber-950/90 border-2 border-amber-500 rounded-3xl shadow-xl flex items-start justify-between gap-3 text-amber-200 animate-in fade-in">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-amber-500 text-slate-950 font-bold shrink-0 mt-0.5">
+              ⚠️
+            </div>
+            <div className="space-y-1.5">
+              <h4 className="font-extrabold text-sm text-white">Action Required: Enable Google Drive API in Google Cloud</h4>
+              <p className="text-xs text-amber-300 leading-relaxed">
+                Google blocked the upload because the <strong>Google Drive API</strong> is not yet enabled in Google Cloud Project <strong>616794995226</strong>. Click the button below, hit the blue <strong>"ENABLE"</strong> button on Google's page, and then click <strong>"Retry"</strong> on your video!
+              </p>
+              <div className="pt-1.5 flex items-center gap-2 flex-wrap">
+                <a
+                  href="https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=616794995226"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-xl transition shadow-lg shadow-amber-500/20"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Click Here to Enable Google Drive API in Google Cloud</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* =========================================================================
           WORD DOCUMENT SHEET CANVAS (MAIN WRITING AREA)
          ========================================================================= */}

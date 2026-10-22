@@ -214,6 +214,27 @@ export const DriveMediaViewerModal: React.FC<DriveMediaViewerModalProps> = ({
                       : 'This file has not yet been streamed to your Google Drive Videos folder.'}
                   </p>
                 </div>
+
+                {attachment.uploadError && (attachment.uploadError.includes('SERVICE_DISABLED') || attachment.uploadError.includes('616794995226')) && (
+                  <div className="p-3 bg-amber-950/80 border border-amber-500 rounded-xl text-amber-200 text-left space-y-2 text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-white">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Action Required: Enable Google Drive API (1 Click)</span>
+                    </div>
+                    <p className="text-[11px] text-amber-300 leading-relaxed">
+                      Google Drive API is disabled in project <strong>616794995226</strong>. Click below to enable it in Google Cloud Console, then tap <strong>Upload Video to Google Drive</strong>.
+                    </p>
+                    <a
+                      href="https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=616794995226"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-lg transition shadow"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Click to Enable Google Drive API in Google Cloud</span>
+                    </a>
+                  </div>
+                )}
               </div>
               {onRetryUpload && (
                 <div className="pt-2">
@@ -246,6 +267,24 @@ export const DriveMediaViewerModal: React.FC<DriveMediaViewerModalProps> = ({
                       : 'File is saved in local browser storage only.'}
                   </p>
                 </div>
+
+                {attachment.uploadError && (attachment.uploadError.includes('SERVICE_DISABLED') || attachment.uploadError.includes('616794995226')) && (
+                  <div className="p-3 bg-amber-950/80 border border-amber-500 rounded-xl text-amber-200 text-left space-y-2 text-xs">
+                    <div className="flex items-center gap-1.5 font-bold text-white">
+                      <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                      <span>Action Required: Enable Google Drive API</span>
+                    </div>
+                    <a
+                      href="https://console.developers.google.com/apis/api/drive.googleapis.com/overview?project=616794995226"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg transition"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>Enable Google Drive API in Google Cloud</span>
+                    </a>
+                  </div>
+                )}
               </div>
               <div className="flex items-center justify-center gap-2 pt-1 flex-wrap">
                 {onRetryUpload && (

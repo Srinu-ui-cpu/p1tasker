@@ -129,11 +129,10 @@ export class FirebaseAuthService {
     }
 
     const provider = new GoogleAuthProvider();
-    // Request Drive file access, appdata and profile scopes
+    // Request Drive file access and profile scopes (non-restricted drive.file scope)
     provider.addScope('https://www.googleapis.com/auth/userinfo.profile');
     provider.addScope('https://www.googleapis.com/auth/userinfo.email');
     provider.addScope('https://www.googleapis.com/auth/drive.file');
-    provider.addScope('https://www.googleapis.com/auth/drive.appdata');
 
     provider.setCustomParameters({
       prompt: 'select_account',
