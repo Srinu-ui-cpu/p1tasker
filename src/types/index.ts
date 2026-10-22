@@ -18,6 +18,12 @@ export interface FileAttachment {
   category?: string; // Subfolder category (e.g. Videos, Documents, Images, etc.)
   hash: string; // SHA-256 content hash for deduplication
   uploadedAt: string;
+  version?: number; // File version number (1, 2, 3...)
+  isUpdated?: boolean; // Whether this file is an update of an existing file
+  updatedFromId?: string; // ID of the earlier file this was updated from
+  updatedFromName?: string; // Name of the earlier file
+  updatedFromHash?: string; // Hash of the earlier file
+  supersededBy?: string; // ID of newer version if this file was replaced
 }
 
 export interface TaskItem {
@@ -98,6 +104,12 @@ export interface DeduplicatedFileRegistry {
     firstDate: string;
     datesUsed: string[];
     updatedAt: string;
+    version?: number;
+    isUpdated?: boolean;
+    updatedFromId?: string;
+    updatedFromName?: string;
+    updatedFromHash?: string;
+    supersededBy?: string;
   };
 }
 

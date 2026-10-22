@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { 
   CheckSquare, 
@@ -15,12 +15,19 @@ import {
   ChevronUp, 
   Sparkles,
   X,
-  Volume2
+  Volume2,
+  FileText,
+  Cloud,
+  Play,
+  Paperclip,
+  Maximize2
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { TaskItem, Priority, Subtask } from '../types';
+import { TaskItem, Priority, Subtask, FileAttachment } from '../types';
 import { StorageService } from '../services/storageService';
 import { AlarmService } from '../services/alarmService';
+import { GoogleAuthService } from '../services/googleAuthService';
+import { DriveMediaViewerModal } from './DriveMediaViewerModal';
 
 interface DayWorkspaceProps {
   currentDate: string; // YYYY-MM-DD
@@ -49,6 +56,54 @@ export const DayWorkspace: React.FC<DayWorkspaceProps> = ({
   const [modalStartTime, setModalStartTime] = useState('09:00');
   const [modalEndTime, setModalEndTime] = useState('10:00');
   const [modalAlarmEnabled, setModalAlarmEnabled] = useState(true);
+
+  // Task Attachment State & Media Viewer
+  const [viewingTaskAttachment, setViewingTaskAttachment] = useState<FileAttachment | null>(null);
+  const [attachingToTaskId, setAttachingToTaskId] = useState<string | null>(null);
+  const taskFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleTriggerAttachFileToTask = (taskId: string) => {
+    setAttachingToTaskId(taskId);
+    taskFileInputRef.current?.click();
+  };
+
+  const handleTaskFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !attachingToTaskId) return;
+
+    try {
+      const task = tasks.find(t => t.id === attachingToTaskId);
+      if (!task) return;
+
+      const deduplication = await StorageService.attachFileToDate(file, currentDate);
+      const attachment = deduplication.attachment;
+
+      // Upload to Drive if connected and not exact duplicate with driveId
+      if (deduplication.isDuplicate && deduplication.existingDriveId) {
+        attachment.driveId = deduplication.existingDriveId;
+      } else if (GoogleAuthService.isAuthenticated()) {
+        try {
+          const driveUploaded = await GoogleAuthService.uploadMediaFileResumable(file);
+          if (driveUploaded?.fileId) {
+            attachment.driveId = driveUploaded.fileId;
+          }
+        } catch {
+          // keep local
+        }
+      }
+
+      const updatedTask: TaskItem = {
+        ...task,
+        attachments: [...(task.attachments || []).filter(a => a.id !== attachment.id), attachment],
+      };
+      StorageService.saveTask(updatedTask);
+      onTasksUpdated();
+      showToast(`Attached "${file.name}" to "${task.title}"!`);
+    } finally {
+      if (e.target) e.target.value = '';
+      setAttachingToTaskId(null);
+    }
+  };
 
   const parsedDate = parseISO(currentDate);
   const diary = StorageService.getDiaryForDate(currentDate);
@@ -375,7 +430,7 @@ export const DayWorkspace: React.FC<DayWorkspaceProps> = ({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className={`font-semibold text-sm ${isCompleted ? 'line-through text-slate-500' : 'text-slate-100'}`}>
-                          {task.title}
+                          {StorageService.sanitizeTaskText(task.title)}
                         </span>
 
                         {/* Priority Badge */}
@@ -434,7 +489,41 @@ export const DayWorkspace: React.FC<DayWorkspaceProps> = ({
                       </div>
 
                       {task.description && (
-                        <p className="text-xs text-slate-400 mt-1 line-clamp-2">{task.description}</p>
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-2">
+                          {StorageService.sanitizeTaskText(task.description)}
+                        </p>
+                      )}
+
+                      {/* Small Clickable Media Attachment Badges */}
+                      {task.attachments && task.attachments.length > 0 && (
+                        <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                          {task.attachments.map((att) => {
+                            const isImg = att.type?.startsWith('image/');
+                            const isVid = att.type?.startsWith('video/');
+                            return (
+                              <div
+                                key={att.id}
+                                onClick={() => setViewingTaskAttachment(att)}
+                                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 hover:border-indigo-500/80 cursor-pointer transition text-xs shadow-sm group"
+                                title={`Click to view in popup: ${att.name}`}
+                              >
+                                {isImg && att.dataUrl ? (
+                                  <img src={att.dataUrl} alt={att.name} className="w-4 h-4 rounded object-cover" />
+                                ) : isVid ? (
+                                  <Play className="w-3 h-3 text-indigo-400 fill-indigo-400" />
+                                ) : (
+                                  <FileText className="w-3 h-3 text-indigo-400" />
+                                )}
+                                <span className="text-[11px] font-semibold text-slate-200 truncate max-w-[140px] group-hover:text-white">
+                                  {att.name}
+                                </span>
+                                {att.driveId && (
+                                  <Cloud className="w-2.5 h-2.5 text-emerald-400" title="Synced with Google Drive" />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       )}
 
                       {/* Subtasks summary */}
@@ -488,8 +577,8 @@ export const DayWorkspace: React.FC<DayWorkspaceProps> = ({
                       </div>
                     ))}
 
-                    {/* Add Subtask input */}
-                    <div className="flex items-center gap-2 pt-1">
+                    {/* Add Subtask input & Attach File Action */}
+                    <div className="flex items-center gap-2 pt-1 flex-wrap">
                       <input
                         type="text"
                         placeholder="Add subtask..."
@@ -501,13 +590,22 @@ export const DayWorkspace: React.FC<DayWorkspaceProps> = ({
                             handleAddSubtask(task);
                           }
                         }}
-                        className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none flex-1"
+                        className="bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 placeholder-slate-500 focus:outline-none flex-1 min-w-[140px]"
                       />
                       <button
                         onClick={() => handleAddSubtask(task)}
                         className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 rounded-lg transition"
                       >
                         Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleTriggerAttachFileToTask(task.id)}
+                        className="px-2.5 py-1 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700/60 text-xs text-indigo-300 rounded-lg transition flex items-center gap-1 font-semibold"
+                        title="Attach a document, image, or media to this task"
+                      >
+                        <Paperclip className="w-3 h-3" />
+                        <span>+ Attach File</span>
                       </button>
                     </div>
                   </div>
@@ -606,6 +704,21 @@ export const DayWorkspace: React.FC<DayWorkspaceProps> = ({
         </div>
       )}
 
+      {/* Hidden File Input for Task Attachments */}
+      <input
+        ref={taskFileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleTaskFileSelected}
+      />
+
+      {/* Media Viewer Modal for Task Attachments */}
+      <DriveMediaViewerModal
+        isOpen={!!viewingTaskAttachment}
+        attachment={viewingTaskAttachment}
+        onClose={() => setViewingTaskAttachment(null)}
+        date={currentDate}
+      />
     </div>
   );
 };

@@ -319,8 +319,20 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
       let driveUploaded: { fileId: string; webViewLink?: string } | null = null;
       let driveError: string | null = null;
 
-      // Direct Resumable Google Drive Upload with live Progress Bar
-      if (GoogleAuthService.isAuthenticated()) {
+      // --- SMART MEDIA DEDUPLICATION & VERSIONING ---
+      // 1. Process deduplication first: if exact duplicate already in Drive, NEVER re-upload!
+      const deduplication = await StorageService.attachFileToDate(file, currentDate);
+      const attachment = deduplication.attachment;
+      const isDuplicate = deduplication.isDuplicate;
+      const isUpdate = deduplication.isUpdate;
+      const existingDriveId = deduplication.existingDriveId;
+
+      if (isDuplicate && existingDriveId) {
+        // Exact duplicate: already backed up in Google Drive! Do NOT re-upload!
+        attachment.driveId = existingDriveId;
+        setAiNotification(`✓ "${file.name}" already in Google Drive & local vault. Re-used existing file!`);
+      } else if (GoogleAuthService.isAuthenticated()) {
+        // Direct Resumable Google Drive Upload with live Progress Bar
         setUploadProgress({
           active: true,
           filename: file.name,
@@ -359,13 +371,12 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
         driveError = 'Google Drive not connected. Stored in local storage only.';
       }
 
-      const { attachment } = await StorageService.attachFileToDate(file, currentDate);
       const isAuthentic = !!(driveUploaded?.fileId && !driveUploaded.fileId.startsWith('file-'));
 
       if (isAuthentic) {
         attachment.driveId = driveUploaded!.fileId;
         attachment.uploadError = undefined;
-      } else {
+      } else if (!attachment.driveId) {
         attachment.driveId = undefined;
         if (driveError) {
           attachment.uploadError = driveError;
@@ -404,17 +415,40 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
         newContent = entry.content ? `${entry.content.trimEnd()}${marker}` : marker.trim();
       }
 
+      // Keep both old and updated versions in attachments list!
+      let updatedAttachments: FileAttachment[];
+      if (isUpdate && deduplication.updatedFrom) {
+        // Mark old attachment as superseded, but keep it in attachments
+        updatedAttachments = entry.attachments.map((a) =>
+          a.id === deduplication.updatedFrom?.id || a.hash === deduplication.updatedFrom?.hash
+            ? { ...a, supersededBy: attachment.id }
+            : a
+        );
+        // Append the new updated attachment
+        if (!updatedAttachments.some((a) => a.id === attachment.id)) {
+          updatedAttachments.push(attachment);
+        }
+      } else {
+        updatedAttachments = [...entry.attachments.filter((a) => a.id !== attachment.id), attachment];
+      }
+
       const updated: DiaryEntry = {
         ...entry,
         content: newContent,
-        attachments: [...entry.attachments.filter((a) => a.id !== attachment.id), attachment],
+        attachments: updatedAttachments,
         updatedAt: new Date().toISOString(),
       };
       setEntry(updated);
       StorageService.saveDiaryForDate(updated);
 
-      if (attachment.driveId) {
-        setAiNotification(`✓ Uploaded "${file.name}" to Google Drive (${GoogleAuthService.categorizeFile(file.name, file.type)})!`);
+      if (isDuplicate && existingDriveId) {
+        // Already notified above
+      } else if (attachment.driveId) {
+        if (isUpdate) {
+          setAiNotification(`✓ Uploaded updated version (v${attachment.version || 2}) of "${file.name}" to Google Drive!`);
+        } else {
+          setAiNotification(`✓ Uploaded "${file.name}" to Google Drive (${GoogleAuthService.categorizeFile(file.name, file.type)})!`);
+        }
       } else {
         setAiNotification(`Saved "${file.name}" locally. (Drive upload not completed: ${attachment.uploadError || 'Pending'})`);
       }
@@ -872,6 +906,7 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-1">
             {entry.attachments.map((file) => {
               const isImage = file.type.startsWith('image/');
+              const isVideo = file.type.startsWith('video/');
               const hasDrive = !!(
                 file.driveId && 
                 !file.driveId.startsWith('file-') && 
@@ -895,11 +930,20 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
                         alt={file.name} 
                         className="w-full h-full object-cover transition-transform group-hover/thumb:scale-105" 
                       />
+                    ) : isVideo ? (
+                      <div className="flex flex-col items-center gap-1.5 text-indigo-400">
+                        <div className="w-10 h-10 rounded-full bg-indigo-950/90 border border-indigo-700/80 flex items-center justify-center shadow-lg">
+                          <Play className="w-5 h-5 fill-indigo-400 ml-0.5" />
+                        </div>
+                        <span className="text-[9px] font-mono uppercase font-bold text-slate-400">
+                          {file.type.split('/')[1] || 'VIDEO'}
+                        </span>
+                      </div>
                     ) : (
                       <div className="flex flex-col items-center gap-1 text-slate-400">
                         <FileText className="w-8 h-8 text-indigo-400" />
                         <span className="text-[9px] font-mono uppercase text-slate-500">
-                          {file.type.split('/')[1] || 'FILE'}
+                          {file.name.split('.').pop()?.toUpperCase() || file.type.split('/')[1] || 'FILE'}
                         </span>
                       </div>
                     )}
@@ -919,8 +963,30 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
                       >
                         {file.name}
                       </span>
+
+                      {/* Updated File Versioning Badge */}
+                      {file.isUpdated && (
+                        <div className="mt-1 flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded-md bg-indigo-950 border border-indigo-700 text-indigo-300 text-[9px] font-bold">
+                            Updated (v{file.version || 2})
+                          </span>
+                          {file.updatedFromName && (
+                            <span className="text-[9px] text-slate-400 truncate max-w-[130px]" title={`Update of ${file.updatedFromName}`}>
+                              of {file.updatedFromName}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Superseded (Previous Version) Indicator */}
+                      {file.supersededBy && (
+                        <span className="mt-1 px-1.5 py-0.5 rounded-md bg-slate-900 border border-slate-700 text-slate-400 text-[9px] font-medium block">
+                          Previous Version
+                        </span>
+                      )}
+
                       <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mt-1">
-                        <span>{(file.size / 1024).toFixed(0)} KB</span>
+                        <span>{file.size > 1024 * 1024 ? `${(file.size / (1024 * 1024)).toFixed(1)} MB` : `${(file.size / 1024).toFixed(0)} KB`}</span>
                         {hasDrive ? (
                           <span className="text-emerald-400 flex items-center gap-0.5" title="Uploaded to Google Drive">
                             <Cloud className="w-2.5 h-2.5" /> Drive

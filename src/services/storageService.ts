@@ -18,7 +18,78 @@ const INITIAL_PROJECTS: Project[] = [
   { id: 'proj-health', name: 'Health & Fitness', color: '#ec4899', icon: 'Heart' },
 ];
 
+export interface DeduplicationResult {
+  attachment: FileAttachment;
+  isDuplicate: boolean;
+  isUpdate: boolean;
+  existingDriveId?: string;
+  updatedFrom?: {
+    id: string;
+    name: string;
+    hash: string;
+    version?: number;
+  };
+}
+
 export class StorageService {
+  /**
+   * Cleanses raw JSON, tags, and code blocks from task text and titles:
+   * 1. Extracts clean title if raw JSON array/object was passed (e.g. [{"title":"..."}] or {"title":"..."})
+   * 2. Strips {{attachment:...}}, {{file:...}}, and ![...](attachment:...) markers
+   * 3. Strips markdown code blocks
+   */
+  static sanitizeTaskText(text?: string): string {
+    if (!text) return '';
+    let cleaned = text.trim();
+
+    // Unwrap markdown code fences: ```json ... ``` or ``` ... ```
+    cleaned = cleaned.replace(/```(?:json)?\s*([\s\S]*?)\s*```/g, '$1').trim();
+
+    // Check if entire text is a JSON array or object
+    if ((cleaned.startsWith('{') && cleaned.endsWith('}')) || (cleaned.startsWith('[') && cleaned.endsWith(']'))) {
+      try {
+        const parsed = JSON.parse(cleaned);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const first = parsed[0];
+          if (typeof first === 'string') return this.sanitizeTaskText(first);
+          if (first && typeof first === 'object' && first.title) return this.sanitizeTaskText(first.title);
+        } else if (parsed && typeof parsed === 'object' && parsed.title) {
+          return this.sanitizeTaskText(parsed.title);
+        }
+      } catch {
+        // Not valid JSON, continue with string cleansing
+      }
+    }
+
+    // Strip JSON field patterns like {"title": "..."}
+    cleaned = cleaned.replace(/\{\s*"title"\s*:\s*"([^"]+)"[^\}]*\}/g, '$1');
+
+    // Strip inline attachment tags
+    cleaned = cleaned.replace(/\{\{(?:attachment|file):[a-zA-Z0-9_\-.:]+\}\}/g, '').trim();
+    cleaned = cleaned.replace(/!\[[^\]]*\]\(attachment:[a-zA-Z0-9_\-.:]+\)/g, '').trim();
+
+    // Remove any leftover leading JSON formatting characters like [, ], {, }
+    cleaned = cleaned.replace(/^[\[\{\s"]+|[\]\}\s"]+$/g, '').trim();
+
+    return cleaned || text.trim();
+  }
+
+  /**
+   * Helper to categorize files without circular module dependencies
+   */
+  static categorizeFile(fileName: string, mimeType: string): string {
+    const ext = (fileName.split('.').pop() || '').toLowerCase();
+    const mime = (mimeType || '').toLowerCase();
+    if (mime.startsWith('video/') || ['mp4', 'mkv', 'avi', 'mov', 'webm', 'wmv'].includes(ext)) return 'Videos';
+    if (mime.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp'].includes(ext)) return 'Images';
+    if (mime.startsWith('audio/') || ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'].includes(ext)) return 'Audio';
+    if (['pdf', 'doc', 'docx', 'txt', 'rtf', 'odt', 'md'].includes(ext) || mime.includes('pdf') || mime.includes('word') || mime.includes('document')) return 'Documents';
+    if (['xls', 'xlsx', 'csv', 'ods'].includes(ext) || mime.includes('sheet') || mime.includes('excel') || mime.includes('csv')) return 'Spreadsheets';
+    if (['ppt', 'pptx', 'odp'].includes(ext) || mime.includes('presentation') || mime.includes('powerpoint')) return 'Presentations';
+    if (['exe', 'msi', 'apk', 'dmg', 'bin', 'iso', 'bat', 'cmd', 'ps1', 'sh', 'zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) return 'Programs';
+    return 'Other';
+  }
+
   // --- TASKS ---
   static getTasks(): TaskItem[] {
     try {
@@ -27,22 +98,29 @@ export class StorageService {
         return [];
       }
       const parsed: TaskItem[] = JSON.parse(data);
-      // Cleanse only specific legacy mock seed tasks
-      const cleaned = parsed.filter(t => 
-        t.id !== 'task-1' &&
-        t.id !== 'task-2' &&
-        t.id !== 'task-3' &&
-        !t.id.startsWith('task-1-') &&
-        !t.id.startsWith('task-2-') &&
-        !t.id.startsWith('task-3-') &&
-        !t.title.toLowerCase().includes('shdip') &&
-        !t.title.toLowerCase().includes('sprint review')
-      );
+      // Cleanse only specific legacy mock seed tasks and sanitize text
+      const cleaned = parsed
+        .filter(t => 
+          t.id !== 'task-1' &&
+          t.id !== 'task-2' &&
+          t.id !== 'task-3' &&
+          !t.id.startsWith('task-1-') &&
+          !t.id.startsWith('task-2-') &&
+          !t.id.startsWith('task-3-') &&
+          !t.title.toLowerCase().includes('shdip') &&
+          !t.title.toLowerCase().includes('sprint review')
+        )
+        .map(t => ({
+          ...t,
+          title: this.sanitizeTaskText(t.title),
+          description: t.description ? this.sanitizeTaskText(t.description) : undefined,
+          attachments: t.attachments || [],
+        }));
       if (cleaned.length !== parsed.length) {
         this.saveTasks(cleaned);
         return cleaned;
       }
-      return parsed;
+      return cleaned;
     } catch (e) {
       console.error('Error loading tasks:', e);
       return [];
@@ -50,7 +128,13 @@ export class StorageService {
   }
 
   static saveTasks(tasks: TaskItem[]): void {
-    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(tasks));
+    const sanitized = tasks.map(t => ({
+      ...t,
+      title: this.sanitizeTaskText(t.title),
+      description: t.description ? this.sanitizeTaskText(t.description) : undefined,
+      attachments: t.attachments || [],
+    }));
+    localStorage.setItem(STORAGE_KEYS.TASKS, JSON.stringify(sanitized));
   }
 
   static getTasksForDate(date: string): TaskItem[] {
@@ -59,12 +143,18 @@ export class StorageService {
   }
 
   static saveTask(task: TaskItem): void {
+    const sanitized: TaskItem = {
+      ...task,
+      title: this.sanitizeTaskText(task.title),
+      description: task.description ? this.sanitizeTaskText(task.description) : undefined,
+      attachments: task.attachments || [],
+    };
     const tasks = this.getTasks();
-    const index = tasks.findIndex(t => t.id === task.id);
+    const index = tasks.findIndex(t => t.id === sanitized.id);
     if (index >= 0) {
-      tasks[index] = { ...task, updatedAt: new Date().toISOString() };
+      tasks[index] = { ...sanitized, updatedAt: new Date().toISOString() };
     } else {
-      tasks.push({ ...task, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
+      tasks.push({ ...sanitized, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     }
     this.saveTasks(tasks);
     try {
@@ -297,80 +387,186 @@ export class StorageService {
   static async attachFileToDate(
     file: File,
     targetDate: string
-  ): Promise<{ attachment: FileAttachment; isDuplicate: boolean }> {
+  ): Promise<DeduplicationResult> {
     return this.processAndDeduplicateFile(file, targetDate);
   }
 
   /**
-   * Handles smart file deduplication when uploading.
-   * If the file exists with the same hash or name:
-   * - Keeps single copy in storage
-   * - Links to the new date
-   * - Updates latest version across all dates!
+   * Handles smart file deduplication and file versioning:
+   * 1. Exact Duplicate (matching SHA-256 hash):
+   *    - Does NOT re-upload to Google Drive if already present. Re-uses existing Drive file!
+   *    - Links target date into registry.
+   * 2. Updated File (same filename, different content hash):
+   *    - Keeps BOTH latest file AND old file in registry!
+   *    - Marks new file with isUpdated: true, version: (prevVersion + 1), and records updatedFromId/updatedFromName.
+   *    - Marks old file with supersededBy: newId.
+   * 3. Brand New File:
+   *    - Registers with version: 1.
    */
   static async processAndDeduplicateFile(
     file: File,
     targetDate: string
-  ): Promise<{ attachment: FileAttachment; isDuplicate: boolean }> {
+  ): Promise<DeduplicationResult> {
     const hash = await this.computeFileHash(file);
     const registry = this.getFileRegistry();
-
-    // Convert file to optimized data URL for compact thumbnail display
     const dataUrl = await this.createOptimizedPreviewUrl(file);
+    const category = this.categorizeFile(file.name, file.type);
 
-    const isDuplicate = !!registry[hash];
-
-    if (isDuplicate) {
+    // --- CASE 1: EXACT DUPLICATE (Matching SHA-256 Hash) ---
+    if (registry[hash]) {
       const existing = registry[hash];
       if (!existing.datesUsed.includes(targetDate)) {
         existing.datesUsed.push(targetDate);
       }
       existing.updatedAt = new Date().toISOString();
-      if (dataUrl) existing.dataUrl = dataUrl;
+      if (dataUrl && !existing.dataUrl) existing.dataUrl = dataUrl;
       existing.name = file.name;
-      
-      // Cleanse any legacy fake driveId
+      if (!existing.category) existing.category = category;
+
+      // Cleanse legacy fake driveId
       if (existing.driveId && (existing.driveId.startsWith('file-') || existing.driveId.length < 15)) {
         delete existing.driveId;
       }
-      
+
       registry[hash] = existing;
-    } else {
+      this.saveFileRegistry(registry);
+
+      const isAuthenticDriveId = !!(
+        existing.driveId &&
+        !existing.driveId.startsWith('file-') &&
+        /^[a-zA-Z0-9_-]{15,}$/.test(existing.driveId)
+      );
+
+      const attachment: FileAttachment = {
+        id: `file-${hash.slice(0, 12)}`,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        dataUrl: existing.dataUrl || dataUrl,
+        driveId: isAuthenticDriveId ? existing.driveId : undefined,
+        uploadError: isAuthenticDriveId ? undefined : existing.uploadError,
+        category: existing.category || category,
+        hash,
+        uploadedAt: existing.updatedAt || new Date().toISOString(),
+        version: existing.version || 1,
+        isUpdated: existing.isUpdated,
+        updatedFromId: existing.updatedFromId,
+        updatedFromName: existing.updatedFromName,
+        updatedFromHash: existing.updatedFromHash,
+        supersededBy: existing.supersededBy,
+      };
+
+      return {
+        attachment,
+        isDuplicate: true,
+        isUpdate: false,
+        existingDriveId: isAuthenticDriveId ? existing.driveId : undefined,
+      };
+    }
+
+    // --- CASE 2: UPDATED FILE (Same filename, different content hash) ---
+    const normalizedName = file.name.trim().toLowerCase();
+    const existingSameNameItem = Object.values(registry).find(
+      (item) => item.name.trim().toLowerCase() === normalizedName && item.hash !== hash
+    );
+
+    if (existingSameNameItem) {
+      const prevVersion = existingSameNameItem.version || 1;
+      const nextVersion = prevVersion + 1;
+      const prevId = `file-${existingSameNameItem.hash.slice(0, 12)}`;
+      const newId = `file-${hash.slice(0, 12)}`;
+
+      // Update old file in registry to record that it was superseded, BUT KEEP IT!
+      registry[existingSameNameItem.hash] = {
+        ...existingSameNameItem,
+        supersededBy: newId,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Register the updated file
       registry[hash] = {
         hash,
         name: file.name,
         size: file.size,
         type: file.type,
         dataUrl,
+        category,
         firstDate: targetDate,
         datesUsed: [targetDate],
         updatedAt: new Date().toISOString(),
+        version: nextVersion,
+        isUpdated: true,
+        updatedFromId: prevId,
+        updatedFromName: existingSameNameItem.name,
+        updatedFromHash: existingSameNameItem.hash,
+      };
+
+      this.saveFileRegistry(registry);
+
+      const attachment: FileAttachment = {
+        id: newId,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        dataUrl,
+        category,
+        hash,
+        uploadedAt: new Date().toISOString(),
+        version: nextVersion,
+        isUpdated: true,
+        updatedFromId: prevId,
+        updatedFromName: existingSameNameItem.name,
+        updatedFromHash: existingSameNameItem.hash,
+      };
+
+      return {
+        attachment,
+        isDuplicate: false,
+        isUpdate: true,
+        updatedFrom: {
+          id: prevId,
+          name: existingSameNameItem.name,
+          hash: existingSameNameItem.hash,
+          version: prevVersion,
+        },
       };
     }
 
-    this.saveFileRegistry(registry);
-
-    const existingReg = registry[hash];
-    const isAuthenticDriveId = !!(
-      existingReg?.driveId &&
-      !existingReg.driveId.startsWith('file-') &&
-      /^[a-zA-Z0-9_-]{15,}$/.test(existingReg.driveId)
-    );
-
-    const attachment: FileAttachment = {
-      id: `file-${hash.slice(0, 12)}`,
+    // --- CASE 3: BRAND NEW FILE ---
+    const newId = `file-${hash.slice(0, 12)}`;
+    registry[hash] = {
+      hash,
       name: file.name,
       size: file.size,
       type: file.type,
       dataUrl,
-      // ZERO FAKING: Only real Google Drive file IDs are retained. Never assign file-... as driveId.
-      driveId: isAuthenticDriveId ? existingReg.driveId : undefined,
-      uploadError: isAuthenticDriveId ? undefined : existingReg?.uploadError,
+      category,
+      firstDate: targetDate,
+      datesUsed: [targetDate],
+      updatedAt: new Date().toISOString(),
+      version: 1,
+      isUpdated: false,
+    };
+    this.saveFileRegistry(registry);
+
+    const attachment: FileAttachment = {
+      id: newId,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      dataUrl,
+      category,
       hash,
       uploadedAt: new Date().toISOString(),
+      version: 1,
+      isUpdated: false,
     };
 
-    return { attachment, isDuplicate };
+    return {
+      attachment,
+      isDuplicate: false,
+      isUpdate: false,
+    };
   }
 
   static deleteDiaryAttachment(targetDate: string, fileId: string): boolean {

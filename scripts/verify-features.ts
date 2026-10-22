@@ -1731,6 +1731,149 @@ End of meeting notes.`;
       'GoogleAuthService.repromptDriveToken must exist for 1-click GIS token re-prompt'
     );
   });
+
+  // =========================================================================
+  // SUITE 17: Media Deduplication, File Versioning, Visual Document Previews & Task Sanitization
+  // =========================================================================
+  console.log('\n>> Running Suite 17: Media Deduplication, Versioning, Document Previews & Task Sanitization');
+
+  await runTest('ExactMediaDeduplicationWithoutReupload', 'Detects duplicate file and provides existing Drive ID to prevent re-uploading', async () => {
+    const fileContent = 'Unique content for testing deduplication ' + Date.now();
+    const file1 = new File([fileContent], 'dedup_sample.pdf', { type: 'application/pdf' });
+    
+    // 1. Initial upload
+    const res1 = await StorageService.processAndDeduplicateFile(file1, '2026-10-22');
+    assert(!res1.isDuplicate, 'Initial upload must NOT be marked duplicate');
+    assertEquals(res1.attachment.name, 'dedup_sample.pdf', 'File name preserved');
+    assertEquals(res1.attachment.version, 1, 'Initial version is 1');
+
+    // Simulate authentic Google Drive file ID saved in registry
+    const registry = StorageService.getFileRegistry();
+    const realDriveId = '1RealDriveFileIdDeduplication987';
+    registry[res1.attachment.hash].driveId = realDriveId;
+    StorageService.saveFileRegistry(registry);
+
+    // 2. Upload exact duplicate file again
+    const fileDuplicate = new File([fileContent], 'dedup_sample.pdf', { type: 'application/pdf' });
+    const res2 = await StorageService.processAndDeduplicateFile(fileDuplicate, '2026-10-23');
+
+    assert(res2.isDuplicate, 'Exact file must be detected as duplicate');
+    assert(!res2.isUpdate, 'Exact duplicate must not be marked as update');
+    assertEquals(res2.existingDriveId, realDriveId, 'Must return existing authentic Google Drive ID');
+    assertEquals(res2.attachment.driveId, realDriveId, 'Attachment must inherit authentic Drive ID without re-upload');
+  });
+
+  await runTest('FileVersionUpdateTracking', 'Uploading modified file with same name updates version, preserves old file, and remembers previous file', async () => {
+    const baseName = 'Quarterly_Report_2026.docx';
+    const v1Content = 'Version 1 document content ' + Math.random();
+    const fileV1 = new File([v1Content], baseName, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+
+    // Upload v1
+    const resV1 = await StorageService.processAndDeduplicateFile(fileV1, '2026-10-20');
+    assertEquals(resV1.attachment.version, 1, 'Version 1 assigned');
+
+    // Upload v2 (same filename, modified content)
+    const v2Content = 'Version 2 updated document content ' + Math.random();
+    const fileV2 = new File([v2Content], baseName, { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+
+    const resV2 = await StorageService.processAndDeduplicateFile(fileV2, '2026-10-22');
+    assert(!resV2.isDuplicate, 'Modified file must not be marked as duplicate');
+    assert(resV2.isUpdate, 'Modified file with matching filename MUST be detected as file update');
+    assertEquals(resV2.attachment.version, 2, 'Version must be incremented to 2');
+    assert(resV2.attachment.isUpdated === true, 'isUpdated must be true');
+    assertEquals(resV2.attachment.updatedFromName, baseName, 'Must record updatedFromName');
+    assertEquals(resV2.attachment.updatedFromHash, resV1.attachment.hash, 'Must record updatedFromHash');
+
+    // Verify registry maintains BOTH old file and new file!
+    const registry = StorageService.getFileRegistry();
+    assert(!!registry[resV1.attachment.hash], 'Old file v1 MUST be preserved in registry');
+    assert(!!registry[resV2.attachment.hash], 'New file v2 MUST be present in registry');
+    assertEquals(registry[resV1.attachment.hash].supersededBy, resV2.attachment.id, 'Old file must record supersededBy');
+  });
+
+  await runTest('TaskTextSanitization', 'StorageService.sanitizeTaskText cleanses raw JSON, tags, and fences from titles and descriptions', () => {
+    // 1. Raw JSON array of objects
+    const jsonArray = '[{"title": "Complete quarterly tax filings", "priority": "high"}]';
+    const clean1 = StorageService.sanitizeTaskText(jsonArray);
+    assertEquals(clean1, 'Complete quarterly tax filings', 'JSON array title cleanly extracted');
+
+    // 2. Raw JSON single object
+    const jsonObject = '{"title": "Review presentation slides", "priority": "urgent"}';
+    const clean2 = StorageService.sanitizeTaskText(jsonObject);
+    assertEquals(clean2, 'Review presentation slides', 'JSON object title cleanly extracted');
+
+    // 3. Inline attachment marker removal
+    const tagText = 'Submit draft report {{attachment:file-9876543210ab}} to management';
+    const clean3 = StorageService.sanitizeTaskText(tagText);
+    assertEquals(clean3, 'Submit draft report  to management', 'Attachment tags stripped from task text');
+
+    // 4. Markdown code block fences
+    const fencedJson = '```json\n[{"title": "Deploy staging server"}]\n```';
+    const clean4 = StorageService.sanitizeTaskText(fencedJson);
+    assertEquals(clean4, 'Deploy staging server', 'Markdown code fence stripped and title extracted');
+
+    // 5. Normal text untouched
+    const normalText = 'Schedule team sync meeting for 10am';
+    assertEquals(StorageService.sanitizeTaskText(normalText), normalText, 'Normal text preserved exactly');
+  });
+
+  await runTest('VisualWordDocumentWYSIWYGContract', 'WordDocumentCanvas renders interactive paragraph blocks with small clickable preview cards and NO exposed tags', () => {
+    const wordCanvasPath = path.resolve(process.cwd(), 'src/components/WordDocumentCanvas.tsx');
+    const wordCanvasCode = fs.readFileSync(wordCanvasPath, 'utf-8');
+
+    // 1. Must support interactive document view as default
+    assert(
+      wordCanvasCode.includes("viewMode === 'document'"),
+      'WordDocumentCanvas must provide interactive document view mode'
+    );
+
+    // 2. Must render small clickable preview cards with View and Delete actions
+    assert(
+      wordCanvasCode.includes('onOpenViewer(att)') && wordCanvasCode.includes('handleRemoveAttachmentBlock'),
+      'WordDocumentCanvas must render inline preview cards with View popup and Remove actions'
+    );
+
+    // 3. Must display updated version pills
+    assert(
+      wordCanvasCode.includes('Updated (v'),
+      'WordDocumentCanvas must display Updated version pills'
+    );
+
+    // 4. Must provide insert media below paragraph action
+    assert(
+      wordCanvasCode.includes('+ Insert Image / File below this paragraph') || wordCanvasCode.includes('triggerInsertMedia'),
+      'WordDocumentCanvas must allow inserting media below paragraphs'
+    );
+  });
+
+  await runTest('DayWorkspaceTaskAttachmentIntegration', 'DayWorkspace integrates media attachment preview chips and popup modal for tasks', () => {
+    const dayWorkspacePath = path.resolve(process.cwd(), 'src/components/DayWorkspace.tsx');
+    const dayWorkspaceCode = fs.readFileSync(dayWorkspacePath, 'utf-8');
+
+    // 1. Task attachments rendering
+    assert(
+      dayWorkspaceCode.includes('task.attachments') && dayWorkspaceCode.includes('setViewingTaskAttachment'),
+      'DayWorkspace must render task attachments and open popup viewer'
+    );
+
+    // 2. Sanitized display text
+    assert(
+      dayWorkspaceCode.includes('StorageService.sanitizeTaskText(task.title)'),
+      'DayWorkspace must sanitize task titles on display'
+    );
+
+    // 3. Attach file action
+    assert(
+      dayWorkspaceCode.includes('+ Attach File') && dayWorkspaceCode.includes('handleTriggerAttachFileToTask'),
+      'DayWorkspace must provide + Attach File for tasks'
+    );
+
+    // 4. DriveMediaViewerModal integration
+    assert(
+      dayWorkspaceCode.includes('<DriveMediaViewerModal'),
+      'DayWorkspace must integrate DriveMediaViewerModal for task attachments'
+    );
+  });
   console.log('\n===============================================================');
   console.log('                 AUDIT EXECUTION RESULTS');
   console.log('===============================================================');

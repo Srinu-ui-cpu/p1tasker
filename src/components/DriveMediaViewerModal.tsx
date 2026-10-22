@@ -88,13 +88,31 @@ export const DriveMediaViewerModal: React.FC<DriveMediaViewerModalProps> = ({
               {isImage ? <Cloud className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
             </div>
             <div className="min-w-0">
-              <h3 className="font-bold text-sm sm:text-base text-white truncate" title={attachment.name}>
-                {attachment.name}
-              </h3>
-              <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5">
-                <span>{(attachment.size / 1024).toFixed(1)} KB</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-bold text-sm sm:text-base text-white truncate max-w-sm" title={attachment.name}>
+                  {attachment.name}
+                </h3>
+                {attachment.isUpdated && (
+                  <span className="px-2 py-0.5 rounded-md bg-indigo-950 border border-indigo-700 text-indigo-300 text-[10px] font-bold">
+                    Version {attachment.version || 2} (Updated)
+                  </span>
+                )}
+                {attachment.supersededBy && (
+                  <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400 text-[10px] font-medium">
+                    Previous Version
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5 flex-wrap">
+                <span>{attachment.size > 1024 * 1024 ? `${(attachment.size / (1024 * 1024)).toFixed(1)} MB` : `${(attachment.size / 1024).toFixed(1)} KB`}</span>
                 <span>&bull;</span>
                 <span className="uppercase">{attachment.type.split('/')[1] || 'FILE'}</span>
+                {attachment.updatedFromName && (
+                  <>
+                    <span>&bull;</span>
+                    <span className="text-indigo-400">Update of: {attachment.updatedFromName}</span>
+                  </>
+                )}
                 {date && (
                   <>
                     <span>&bull;</span>

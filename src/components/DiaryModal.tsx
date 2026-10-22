@@ -233,7 +233,8 @@ export const DiaryModal: React.FC<DiaryModalProps> = ({
   // --- 📎 FILE UPLOAD WITH SHA-256 DEDUPLICATION & INLINE INSERTION ---
   const handleInsertMediaFile = async (file: File, insertAfterIndex?: number) => {
     try {
-      const { attachment, isDuplicate } = await StorageService.processAndDeduplicateFile(file, date);
+      const deduplication = await StorageService.processAndDeduplicateFile(file, date);
+      const { attachment, isDuplicate, isUpdate, existingDriveId, updatedFrom } = deduplication;
       
       let newContent = entry.content;
       const marker = `\n\n{{attachment:${attachment.id}}}\n\n`;
@@ -266,19 +267,36 @@ export const DiaryModal: React.FC<DiaryModalProps> = ({
         newContent = entry.content ? `${entry.content.trimEnd()}${marker}` : marker.trim();
       }
 
+      // Keep both old and updated versions in attachments list!
+      let updatedAttachments: FileAttachment[];
+      if (isUpdate && updatedFrom) {
+        updatedAttachments = entry.attachments.map((a) =>
+          a.id === updatedFrom.id || a.hash === updatedFrom.hash
+            ? { ...a, supersededBy: attachment.id }
+            : a
+        );
+        if (!updatedAttachments.some((a) => a.id === attachment.id)) {
+          updatedAttachments.push(attachment);
+        }
+      } else {
+        updatedAttachments = [...entry.attachments.filter((a) => a.id !== attachment.id), attachment];
+      }
+
       const updated = {
         ...entry,
         content: newContent,
-        attachments: [...entry.attachments.filter((a) => a.id !== attachment.id), attachment],
+        attachments: updatedAttachments,
         updatedAt: new Date().toISOString(),
       };
       setEntry(updated);
       StorageService.saveDiaryForDate(updated);
 
       if (isDuplicate) {
-        setDedupNotice(`⚡ Reused existing file "${file.name}" (SHA-256 deduplicated).`);
+        setDedupNotice(`⚡ Reused existing file "${file.name}" (already saved in vault).`);
+      } else if (isUpdate) {
+        setDedupNotice(`✨ Uploaded updated version (v${attachment.version || 2}) of "${file.name}"!`);
       } else {
-        setDedupNotice(`✨ Inserted "${file.name}" inline into document!`);
+        setDedupNotice(`✨ Inserted "${file.name}" into document!`);
       }
       setTimeout(() => setDedupNotice(null), 3500);
 
