@@ -468,7 +468,13 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
 
   // --- 🔄 RETRY FAILED OR PENDING GOOGLE DRIVE UPLOAD ---
   const handleRetryUpload = async (att: FileAttachment) => {
-    if (!GoogleAuthService.isAuthenticated()) {
+    // Check active token or silent refresh first to avoid popping up consent screens
+    let token = GoogleAuthService.getActiveToken();
+    if (!token) {
+      token = await GoogleAuthService.getValidAccessToken();
+    }
+
+    if (!token && !GoogleAuthService.isAuthenticated()) {
       setAiNotification('Google Drive is not connected. Opening Google Sign-In...');
       try {
         await GoogleAuthService.requestRealGoogleOAuth();

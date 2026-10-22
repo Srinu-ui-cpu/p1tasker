@@ -151,15 +151,16 @@ export class GoogleAuthService {
   }
 
   /**
-   * Checks if user is authenticated with a real Google account AND has an active Google Drive token.
-   * If there is no active token, returns false so user can log in and grant permissions.
+   * Checks if user is authenticated with a real Google account.
+   * User remains logged in perpetually until they explicitly click 'Log Out'.
+   * Never kicks user out just because an access token needs refreshing.
    */
   static isAuthenticated(): boolean {
     const authFlag = localStorage.getItem(GOOGLE_AUTH_FLAG);
     if (authFlag !== 'true') return false;
 
     const state = this.getDriveState();
-    return state.isConnected && !!state.userEmail && state.accounts.length > 0 && !!state.accessToken;
+    return state.isConnected && !!state.userEmail && state.accounts.length > 0;
   }
 
   /**
@@ -170,7 +171,9 @@ export class GoogleAuthService {
     localStorage.removeItem(GOOGLE_CLIENT_ID_KEY);
     localStorage.removeItem('tasker_google_drive_state_v2');
     localStorage.removeItem('tasker_remember_me');
-    sessionStorage.clear();
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.clear();
+    }
 
     const cleanState: GoogleDriveState = {
       isConnected: false,
@@ -408,16 +411,67 @@ export class GoogleAuthService {
   /**
    * Dual-Token Perpetual Rotation Engine:
    * Returns current active Google Drive access token.
-   * If current token is near expiry (< 2 mins) and secondary token is ready,
-   * automatically rotates to secondary token immediately.
+   * If current token is near expiry (< 5 mins) or expired, and secondary token is ready,
+   * automatically rotates to secondary token immediately and pre-fetches the next standby token.
+   * NEVER opens popup consent dialogs.
    */
   static getActiveToken(): string | null {
     const state = this.getDriveState();
     const now = Date.now();
-    if (state.tokenExpiresAt && (state.tokenExpiresAt - now < 2 * 60 * 1000) && state.secondaryToken) {
-      this.rotateTokens().catch(() => {});
-      return this.getDriveState().accessToken || null;
+    const isNearingExpiry = state.tokenExpiresAt ? (state.tokenExpiresAt - now < 5 * 60 * 1000) : false;
+    const isExpired = state.tokenExpiresAt ? (state.tokenExpiresAt <= now) : false;
+
+    if ((!state.accessToken || isNearingExpiry || isExpired) && state.secondaryToken) {
+      state.accessToken = state.secondaryToken;
+      state.tokenExpiresAt = state.secondaryTokenExpiresAt;
+      state.secondaryToken = undefined;
+      state.secondaryTokenExpiresAt = undefined;
+      state.lastRotatedAt = new Date().toISOString();
+      StorageService.saveGoogleDriveState(state);
+
+      // Pre-fetch next standby token in background
+      this.requestSilentToken(false).catch(() => {});
+      return state.accessToken;
     }
+    return state.accessToken || null;
+  }
+
+  /**
+   * Asynchronously guarantees a fresh, valid Google Drive access token.
+   * If current token is nearing expiry or expired:
+   * 1. Rotates immediately to the standby token if available.
+   * 2. Otherwise fetches a fresh token silently without prompting the user.
+   * NEVER opens popup dialogs.
+   */
+  static async getValidAccessToken(): Promise<string | null> {
+    const state = this.getDriveState();
+    const now = Date.now();
+    const isNearingExpiry = state.tokenExpiresAt ? (state.tokenExpiresAt - now < 5 * 60 * 1000) : false;
+    const isExpired = state.tokenExpiresAt ? (state.tokenExpiresAt <= now) : false;
+
+    // Fresh active token available
+    if (state.accessToken && !isNearingExpiry && !isExpired) {
+      if (!state.secondaryToken) {
+        this.requestSilentToken(false).catch(() => {});
+      }
+      return state.accessToken;
+    }
+
+    // Rotate immediately to standby token
+    if (state.secondaryToken) {
+      await this.rotateTokens();
+      const updated = this.getDriveState();
+      return updated.accessToken || null;
+    }
+
+    // Attempt silent background refresh without user prompt
+    const refreshed = await this.requestSilentToken(true);
+    if (refreshed) {
+      const updated = this.getDriveState();
+      this.requestSilentToken(false).catch(() => {});
+      return updated.accessToken || null;
+    }
+
     return state.accessToken || null;
   }
 
@@ -493,7 +547,7 @@ export class GoogleAuthService {
 
     setInterval(async () => {
       const state = this.getDriveState();
-      if (!state.isConnected || !state.accessToken) return;
+      if (!state.isConnected) return;
 
       const now = Date.now();
       const ROTATION_WINDOW_MS = 45 * 60 * 1000; // 45 minutes
@@ -827,7 +881,7 @@ export class GoogleAuthService {
    * Ensures the visible `Tasker_Media` folder exists on Google Drive, creating it if needed.
    */
   static async ensureVisibleDriveFolder(): Promise<string | null> {
-    const token = this.getActiveToken();
+    const token = this.getActiveToken() || (await this.getValidAccessToken());
     if (!token) return null;
     const folderId = await this.initDriveFolder(token);
     return folderId && folderId !== 'tasker-app-data-vault' ? folderId : null;
@@ -874,7 +928,7 @@ export class GoogleAuthService {
     file: File,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<{ fileId: string; webViewLink?: string; webContentLink?: string } | null> {
-    let token = this.getActiveToken();
+    let token = this.getActiveToken() || (await this.getValidAccessToken());
     if (!token) {
       onProgress?.({
         loaded: 0,
@@ -923,7 +977,7 @@ export class GoogleAuthService {
     let initRes = await initiate(token);
     if (initRes.status === 401) {
       await this.rotateTokens();
-      token = this.getActiveToken();
+      token = this.getActiveToken() || (await this.getValidAccessToken());
       if (token) {
         initRes = await initiate(token);
       }
@@ -1053,7 +1107,7 @@ export class GoogleAuthService {
     mimeType: string,
     onProgress?: (progress: UploadProgress) => void
   ): Promise<{ fileId: string; webViewLink?: string; webContentLink?: string } | null> {
-    const token = this.getActiveToken();
+    const token = this.getActiveToken() || (await this.getValidAccessToken());
     if (!token) return null;
 
     if (fileBlob instanceof File && (fileBlob.size > 2 * 1024 * 1024 || fileBlob.type.startsWith('video/'))) {
@@ -1143,7 +1197,7 @@ export class GoogleAuthService {
     state.isSyncing = true;
     StorageService.saveGoogleDriveState(state);
 
-    const token = this.getActiveToken();
+    const token = this.getActiveToken() || (await this.getValidAccessToken());
 
     try {
       if (token) {

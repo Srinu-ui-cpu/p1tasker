@@ -314,16 +314,22 @@ export class AIBrokerService {
       (systemInstruction || '').toLowerCase().includes('biographer') ||
       (systemInstruction || '').toLowerCase().includes('diary companion') ||
       (systemInstruction || '').toLowerCase().includes('summarizer') ||
-      (systemInstruction || '').toLowerCase().includes('translator');
+      (systemInstruction || '').toLowerCase().includes('translator') ||
+      (systemInstruction || '').toLowerCase().includes('translate') ||
+      lowerPrompt.includes('translate');
 
     const isExplicitAnalysis =
       !isEditorialTask &&
-      (lowerPrompt.includes('analysis') ||
-       lowerPrompt.includes('critique') ||
-       lowerPrompt.includes('readability') ||
-       lowerPrompt.includes('deep semantic text analysis') ||
+      !lowerPrompt.includes('translate') &&
+      (lowerPrompt.includes('deep semantic text analysis') ||
+       lowerPrompt.includes('in-depth analysis') ||
+       lowerPrompt.includes('text analysis') ||
+       lowerPrompt.includes('analysis and critique') ||
        lowerPrompt.startsWith('analyze') ||
-       lowerPrompt.startsWith('evaluate'));
+       lowerPrompt.includes('analyze this') ||
+       lowerPrompt.startsWith('deep analysis') ||
+       lowerPrompt.startsWith('perform an analysis') ||
+       lowerPrompt.startsWith('provide an analysis'));
     const hasLongTextPassage = prompt.length > 120 && (prompt.includes('\n') || (prompt.match(/[.!?]/g) || []).length >= 2);
 
     if (isExplicitAnalysis && hasLongTextPassage) {
@@ -715,6 +721,59 @@ Your objective is to fix all mistakes and rewrite awkward spoken fragments into 
     };
   }
 
+  /**
+   * Sanitizes translation output to guarantee pure translated text:
+   * - Strips markdown code blocks and backticks
+   * - Strictly blocks and purges any semantic text analysis, metrics, or word counts
+   * - Strips conversational preambles (e.g. "Here is the translation into Telugu:", "Translation:")
+   */
+  static sanitizePureTranslation(raw: string, targetLanguage?: string): string {
+    if (!raw) return '';
+    let text = raw.trim();
+
+    // 1. Strip markdown fences
+    text = text.replace(/^```(?:markdown|text|[a-zA-Z0-9_-]+)?\n?/i, '')
+               .replace(/\n?```$/i, '')
+               .replace(/^[ \t]{4,}/gm, '')
+               .trim();
+
+    // 2. Strictly block & filter out semantic text analysis reports and metrics
+    if (
+      text.includes('Deep Semantic Text Analysis') ||
+      text.includes('Quantitative Reading Metrics') ||
+      text.includes('Word Count:') ||
+      text.includes('Est. Reading Time:') ||
+      text.includes('Core Arguments & Keywords:') ||
+      text.includes('Sentiment & Tone:') ||
+      text.includes('Actionable Recommendations & Next Steps:') ||
+      text.startsWith('### 📑') ||
+      text.startsWith('###')
+    ) {
+      return '';
+    }
+
+    // 3. Strip English preambles and chatty introductions
+    const preamblePatterns = [
+      /^(?:here\s+is\s+(?:the\s+)?(?:direct\s+)?(?:translation|translated\s+text)(?:\s+(?:in|into)\s+[\w\s]+)?:?\s*)/i,
+      /^(?:translation(?:\s+(?:in|into)\s+[\w\s]+)?:?\s*)/i,
+      /^(?:translated\s+text:?\s*)/i,
+      /^(?:sure(?:thing)?[,!.]?\s*(?:here\s+is\s+(?:the\s+)?(?:translation|translated\s+text)[^:\n]*:?\s*)?)/i,
+      /^(?:certainly[!.]?\s*(?:here\s+is\s+(?:the\s+)?(?:translation|translated\s+text)[^:\n]*:?\s*)?)/i,
+      /^(?:in\s+[\w\s]+:?\s*)/i,
+    ];
+
+    for (const pattern of preamblePatterns) {
+      text = text.replace(pattern, '').trim();
+    }
+
+    // Strip surrounding quotes
+    if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) {
+      text = text.slice(1, -1).trim();
+    }
+
+    return text.trim();
+  }
+
   // --- 🌐 MULTI-LANGUAGE SELECTIVE TRANSLATION ---
   static async translateText(
     text: string,
@@ -737,13 +796,9 @@ Your objective is to fix all mistakes and rewrite awkward spoken fragments into 
     if (hasApiKey) {
       try {
         const res = await this.completeText(translationPrompt, systemPrompt);
-        let cleaned = res.text
-          .replace(/^```(?:markdown|text)?\n?/i, '')
-          .replace(/\n?```$/i, '')
-          .replace(/^[ \t]{4,}/gm, '')
-          .trim();
+        const cleaned = this.sanitizePureTranslation(res.text, targetLanguage);
 
-        if (cleaned && !cleaned.startsWith('### 📑 Deep Semantic Text Analysis') && !cleaned.includes('I received your message regarding')) {
+        if (cleaned && !cleaned.includes('I received your message regarding')) {
           return {
             translatedText: cleaned,
             modelUsed: res.modelUsed,
@@ -757,13 +812,9 @@ Your objective is to fix all mistakes and rewrite awkward spoken fragments into 
     // 2. Try Live Cloud AI
     try {
       const liveRes = await this.callFreeLiveAI(translationPrompt, systemPrompt, 'Tasker Translator');
-      let cleaned = liveRes.text
-        .replace(/^```(?:markdown|text)?\n?/i, '')
-        .replace(/\n?```$/i, '')
-        .replace(/^[ \t]{4,}/gm, '')
-        .trim();
+      const cleaned = this.sanitizePureTranslation(liveRes.text, targetLanguage);
 
-      if (cleaned && !cleaned.startsWith('### 📑 Deep Semantic Text Analysis')) {
+      if (cleaned) {
         return {
           translatedText: cleaned,
           modelUsed: liveRes.modelUsed,
@@ -810,17 +861,24 @@ Your objective is to fix all mistakes and rewrite awkward spoken fragments into 
       }
 
       if (translatedSegments.length > 0) {
-        return {
-          translatedText: translatedSegments.join(' '),
-          modelUsed: `Neural Translator (${targetLanguage})`,
-        };
+        const combined = this.sanitizePureTranslation(translatedSegments.join(' '), targetLanguage);
+        if (combined) {
+          return {
+            translatedText: combined,
+            modelUsed: `Neural Translator (${targetLanguage})`,
+          };
+        }
       }
     } catch (apiErr) {
       console.warn('Neural translation API notice:', apiErr);
     }
 
     // 4. Built-in Offline Translation Engine
-    return this.localTranslation(text, targetLanguage, 'Tasker Translation Engine');
+    const local = this.localTranslation(text, targetLanguage, 'Tasker Translation Engine');
+    return {
+      translatedText: this.sanitizePureTranslation(local.translatedText, targetLanguage) || local.translatedText,
+      modelUsed: local.modelUsed,
+    };
   }
 
   // --- LOCAL OFFLINE GRAMMAR PROOFREADER ---
@@ -1137,14 +1195,26 @@ CRITICAL FORMATTING GUIDELINES (STYLE LIKE CHATGPT / GEMINI):
     const res = await this.completeText(effectivePrompt, systemPrompt);
     let replyText = res.text.trim();
 
+    // Clean any robotic subheadings (###, ####, ***) from the response to sound natural like ChatGPT/Gemini
+    replyText = replyText
+      .replace(/^#{1,6}\s*(?:📑|📊|🌅|Review|Summary|Daily Reflection|Reflection|Overview|Key Highlights)?:?\s*$/gmi, '')
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/\*\*\*+([^*]+)\*\*\*+/g, '$1')
+      .replace(/^\s*\*\s*\*\*([^*]+)\*\*:\s*/gm, '• ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+
     // Guard against generic echo or template artifacts if simulated engine was used
     if (
       isSummaryRequest &&
-      (replyText.includes('• Summarize my day into an inspiring closing reflection') ||
+      (!replyText ||
+       replyText.includes('• Summarize my day into an inspiring closing reflection') ||
        replyText.includes('I received your message regarding') ||
        replyText.includes('### 🌅 Daily Reflection') ||
        replyText.includes('### 📊 Review for Today') ||
-       replyText.startsWith('### 📑 Deep Semantic Text Analysis'))
+       replyText.includes('Deep Semantic Text Analysis') ||
+       replyText.includes('Quantitative Reading Metrics') ||
+       replyText.startsWith('###'))
     ) {
       replyText = this.buildOfflineDiarySummary(diaryEntry, tasksForDay);
     }
@@ -1715,12 +1785,16 @@ Offline capabilities ready now:
 
     const isExplicitAnalysis =
       !isEditorialTask &&
-      (lowerPrompt.startsWith('analyze') ||
-       lowerPrompt.startsWith('analysis of') ||
-       lowerPrompt.startsWith('evaluate this') ||
-       lowerPrompt.startsWith('critique this') ||
-       lowerPrompt.startsWith('deep semantic text analysis') ||
-       lowerPrompt.includes('provide an in-depth analysis'));
+      !lowerPrompt.includes('translate') &&
+      (lowerPrompt.includes('deep semantic text analysis') ||
+       lowerPrompt.includes('in-depth analysis') ||
+       lowerPrompt.includes('text analysis') ||
+       lowerPrompt.includes('analysis and critique') ||
+       lowerPrompt.startsWith('analyze') ||
+       lowerPrompt.includes('analyze this') ||
+       lowerPrompt.startsWith('deep analysis') ||
+       lowerPrompt.startsWith('perform an analysis') ||
+       lowerPrompt.startsWith('provide an analysis'));
 
     const hasLongTextPassage = prompt.length > 120 && (prompt.includes('\n') || (prompt.match(/[.!?]/g) || []).length >= 2);
 

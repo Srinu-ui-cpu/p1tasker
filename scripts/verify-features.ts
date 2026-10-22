@@ -25,11 +25,14 @@ class MemoryStorage {
 }
 
 const memoryLocalStorage = new MemoryStorage();
+const memorySessionStorage = new MemoryStorage();
 
-// Polyfill window, localStorage, FileReader, Image, canvas, AudioContext, Notification
+// Polyfill window, localStorage, sessionStorage, FileReader, Image, canvas, AudioContext, Notification
 (globalThis as any).localStorage = memoryLocalStorage;
+(globalThis as any).sessionStorage = memorySessionStorage;
 (globalThis as any).window = globalThis;
 (globalThis as any).window.localStorage = memoryLocalStorage;
+(globalThis as any).window.sessionStorage = memorySessionStorage;
 
 class MockFileReader {
   result: string | null = null;
@@ -710,13 +713,14 @@ async function main() {
 
     const now = new Date();
     const currentMins = now.getHours() * 60 + now.getMinutes();
+    const localToday = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
     // Create task 10 minutes in the future (within 15m gentle warning window: 6-15 mins)
     const start10m = `${String(Math.floor((currentMins + 10) / 60) % 24).padStart(2, '0')}:${String((currentMins + 10) % 60).padStart(2, '0')}`;
     const task15m: TaskItem = {
       id: 'task-alarm-15m',
       title: 'Sprint Planning Standup',
-      date: now.toISOString().split('T')[0],
+      date: localToday,
       startTime: start10m,
       priority: 'high',
       status: 'todo',
@@ -1873,6 +1877,176 @@ End of meeting notes.`;
       dayWorkspaceCode.includes('<DriveMediaViewerModal'),
       'DayWorkspace must integrate DriveMediaViewerModal for task attachments'
     );
+  });
+
+  // =========================================================================
+  // SUITE 18: Perpetual Session Retention, Dual-Token Architecture, Pure AI & Pristine Purge
+  // =========================================================================
+  console.log('\n>> Running Suite 18: Perpetual Session, Dual-Token Architecture, Pure AI & Pristine Purge');
+
+  await runTest('PerpetualSessionRetention', 'User remains logged in perpetually across access token expiry until explicit logout', () => {
+    // 1. Initial sign-in sets authentication
+    GoogleAuthService.signInWithRealEmail('audit.tester@taskeros.com', 'Audit Tester');
+    assert(GoogleAuthService.isAuthenticated(), 'User must be authenticated initially');
+
+    // 2. Token expires or is cleared in background
+    const state = GoogleAuthService.getDriveState();
+    state.accessToken = undefined;
+    state.tokenExpiresAt = Date.now() - 10000;
+    StorageService.saveGoogleDriveState(state);
+
+    // 3. Must NEVER return false or kick user to landing screen
+    assert(
+      GoogleAuthService.isAuthenticated(),
+      'User MUST remain authenticated perpetually even when access token is expired/cleared'
+    );
+
+    // 4. Only explicit signOut terminates the session
+    GoogleAuthService.signOut();
+    assert(!GoogleAuthService.isAuthenticated(), 'Explicit signOut terminates perpetual session');
+  });
+
+  await runTest('DualTokenArchitectureAndSilentRotation', 'Acquires standby token, silently rotates at expiry window, and pre-fetches next standby', async () => {
+    // 1. Setup active and standby tokens
+    GoogleAuthService.signInWithRealEmail('rotation.tester@taskeros.com');
+    const state = GoogleAuthService.getDriveState();
+    state.accessToken = 'active-jwt-token-aaa';
+    state.tokenExpiresAt = Date.now() + 60 * 1000; // 1 min left (< 5 min window)
+    state.secondaryToken = 'standby-jwt-token-bbb';
+    state.secondaryTokenExpiresAt = Date.now() + 3600 * 1000;
+    StorageService.saveGoogleDriveState(state);
+
+    // 2. getActiveToken() detects expiration window and seamlessly promotes standby token
+    const token = GoogleAuthService.getActiveToken();
+    assertEquals(token, 'standby-jwt-token-bbb', 'Active token must seamlessly promote standby token');
+
+    // 3. getValidAccessToken() guarantees a valid token without popup
+    const validToken = await GoogleAuthService.getValidAccessToken();
+    assertEquals(validToken, 'standby-jwt-token-bbb', 'getValidAccessToken returns valid promoted token');
+
+    // 4. Token rotation helper promotes standby token
+    const state2 = GoogleAuthService.getDriveState();
+    state2.secondaryToken = 'standby-jwt-token-ccc';
+    state2.secondaryTokenExpiresAt = Date.now() + 3600 * 1000;
+    StorageService.saveGoogleDriveState(state2);
+
+    const rotated = await GoogleAuthService.rotateTokens();
+    assert(rotated, 'rotateTokens must succeed');
+    const stateAfterRotate = GoogleAuthService.getDriveState();
+    assertEquals(stateAfterRotate.accessToken, 'standby-jwt-token-ccc', 'Promoted secondary token to primary');
+  });
+
+  await runTest('PureTranslationOutput', 'Translation outputs pure direct translated text without semantic analysis reports or preambles', async () => {
+    // 1. Sanitize helper blocks semantic text analysis noise
+    const noisySemanticReport = `### 📑 Deep Semantic Text Analysis
+Quantitative Reading Metrics:
+- Word Count: 14 words
+- Est. Reading Time: 0.1 min
+Translation: ఈరోజు నా పని పూర్తయింది.`;
+
+    const cleaned = AIBrokerService.sanitizePureTranslation(noisySemanticReport, 'Telugu');
+    assertEquals(cleaned, '', 'Semantic text analysis report must be blocked from translation output');
+
+    // 2. Sanitize helper strips conversational English preambles
+    const chattyTranslation = 'Here is the translation into Telugu: ఈరోజు నా ప్రాజెక్ట్ పూర్తయింది.';
+    const pure = AIBrokerService.sanitizePureTranslation(chattyTranslation, 'Telugu');
+    assertEquals(pure, 'ఈరోజు నా ప్రాజెక్ట్ పూర్తయింది.', 'English preamble stripped, returning pure translated text');
+
+    // 3. translateText produces clean translated output without preambles or code fences
+    const sampleText = 'Hello today I finished my work';
+    const result = await AIBrokerService.translateText(sampleText, 'Telugu');
+    assert(!result.translatedText.includes('### 📑 Deep Semantic Text Analysis'), 'No semantic analysis in translation');
+    assert(!result.translatedText.startsWith('Here is the translation'), 'No preamble in translation');
+    assert(result.translatedText.length > 0, 'Translation returned valid text');
+  });
+
+  await runTest('NaturalDiaryChatbotSummarization', 'Diary AI Chat Companion provides natural bullet points and reflections without robotic ### headers', async () => {
+    const dummyDate = '2026-10-22';
+    const dummyDiary = {
+      id: 'diary-audit-1',
+      date: dummyDate,
+      content: 'Woke up early. Completed quarterly roadmap documentation and finalized cloud deployment.',
+      mood: 'productive' as const,
+      attachments: [],
+      tags: ['work', 'release'],
+      updatedAt: new Date().toISOString(),
+    };
+    StorageService.saveDiaryForDate(dummyDiary);
+
+    // Save dummy tasks for the day
+    StorageService.saveTask({
+      id: 'task-audit-1',
+      title: 'Deploy production release',
+      status: 'done',
+      priority: 'high',
+      dueDate: dummyDate,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+
+    const reply = await AIBrokerService.queryDiaryChat(
+      'Please summarize my day into an inspiring closing reflection',
+      dummyDiary,
+      []
+    );
+
+    // Assert response is conversational and natural (no robotic ### headings or *** markers)
+    assert(!reply.responseText.includes('###'), 'Response must NOT contain robotic ### headings');
+    assert(!reply.responseText.includes('***'), 'Response must NOT contain *** header markdown');
+    assert(!reply.responseText.includes('### 📑 Deep Semantic Text Analysis'), 'Response must NOT contain semantic analysis');
+    assert(
+      reply.responseText.length > 50 &&
+      (reply.responseText.toLowerCase().includes('roadmap') ||
+       reply.responseText.toLowerCase().includes('deployment') ||
+       reply.responseText.toLowerCase().includes('summary') ||
+       reply.responseText.includes('•') ||
+       reply.responseText.includes('-')),
+      'Summary includes clean bullet points or reflection'
+    );
+  });
+
+  await runTest('EndToEndDataDeduplicationAndVersioning', 'Full lifecycle of duplicate prevention, version incrementation and registry tracking', async () => {
+    const fileBytes = 'Audit dummy file content for end-to-end verification ' + Date.now();
+    const doc1 = new File([fileBytes], 'Project_Architecture.pdf', { type: 'application/pdf' });
+
+    // Initial attach
+    const res1 = await StorageService.attachFileToDate(doc1, '2026-10-22');
+    assertEquals(res1.attachment.version, 1, 'Initial attachment is v1');
+    assert(!res1.isDuplicate, 'Initial attachment is not duplicate');
+
+    // Duplicate attach on another date
+    const docDup = new File([fileBytes], 'Project_Architecture.pdf', { type: 'application/pdf' });
+    const resDup = await StorageService.attachFileToDate(docDup, '2026-10-23');
+    assert(resDup.isDuplicate, 'Exact duplicate must be detected');
+
+    // Modified update with same filename
+    const modifiedBytes = 'Updated content with new diagrams ' + Date.now();
+    const docV2 = new File([modifiedBytes], 'Project_Architecture.pdf', { type: 'application/pdf' });
+    const resV2 = await StorageService.attachFileToDate(docV2, '2026-10-24');
+    assert(resV2.isUpdate, 'Must be marked as updated version');
+    assertEquals(resV2.attachment.version, 2, 'Version must be incremented to 2');
+  });
+
+  await runTest('WorkspacePristineDataPurge', 'Cleanly purges all test and dummy entries so the workspace is completely pristine', () => {
+    // 1. Purge storage service data
+    StorageService.saveTasks([]);
+    StorageService.saveFileRegistry({});
+
+    // 2. Purge diary and auth state
+    GoogleAuthService.resetAllAuthAndStartFresh();
+    AIBrokerService.purgeAllApiKeys();
+
+    // 3. Clear memory storage
+    memoryLocalStorage.clear();
+
+    // 4. Verify workspace is completely clean
+    const tasks = StorageService.getTasks();
+    const registry = StorageService.getFileRegistry();
+    const isAuth = GoogleAuthService.isAuthenticated();
+
+    assertEquals(tasks.length, 0, 'Tasks must be 0 after pristine purge');
+    assertEquals(Object.keys(registry).length, 0, 'File registry must be empty after pristine purge');
+    assertEquals(isAuth, false, 'Authentication flag must be false after pristine purge');
   });
   console.log('\n===============================================================');
   console.log('                 AUDIT EXECUTION RESULTS');

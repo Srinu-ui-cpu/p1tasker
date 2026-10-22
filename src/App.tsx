@@ -61,16 +61,6 @@ export function App() {
   const [driveState, setDriveState] = useState<GoogleDriveState>(() => GoogleAuthService.getDriveState());
   const [activeAIProvider, setActiveAIProvider] = useState<AIProvider>(() => AIBrokerService.getConfig().activeProvider);
 
-  // Auto-prompt email-only users to attach Google account
-  useEffect(() => {
-    if (isAuthenticated && !driveState.accessToken) {
-      const seen = sessionStorage.getItem('tasker_seen_attach_prompt');
-      if (!seen) {
-        sessionStorage.setItem('tasker_seen_attach_prompt', 'true');
-        setIsAttachModalOpen(true);
-      }
-    }
-  }, [isAuthenticated, driveState.accessToken]);
 
   // Refresh tasks whenever date changes or tasks are updated
   const refreshTasks = () => {

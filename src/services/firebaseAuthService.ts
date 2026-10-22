@@ -200,6 +200,10 @@ export class FirebaseAuthService {
       StorageService.saveGoogleDriveState(driveState);
       GoogleAuthService.setAuthenticated(true);
 
+      // Dual-token perpetual rotation: request secondary token and start heartbeat
+      GoogleAuthService.requestSilentToken(false).catch(() => {});
+      GoogleAuthService.startPerpetualTokenManager();
+
       // Proactively create Tasker_Media folder and all 8 typed subfolders in user's root Google Drive & sync vault
       if (accessToken) {
         try {
@@ -234,9 +238,13 @@ export class FirebaseAuthService {
   }
 
   /**
-   * Immediate 1-click token re-prompt if Google Drive OAuth access token is missing or expired.
+   * Immediate token re-prompt if Google Drive OAuth access token is missing or expired.
+   * Checks valid token and silent rotation first to prevent unnecessary popup dialogs.
    */
   static async repromptGoogleToken(): Promise<string> {
+    const validToken = await GoogleAuthService.getValidAccessToken();
+    if (validToken) return validToken;
+
     try {
       const res = await this.signInWithGoogle();
       if (res.accessToken) return res.accessToken;
