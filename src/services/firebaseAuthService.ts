@@ -145,7 +145,16 @@ export class FirebaseAuthService {
 
       // Extract OAuth credential containing Google Drive access token
       const credential = GoogleAuthProvider.credentialFromResult(result);
-      const accessToken = credential?.accessToken;
+      let accessToken = credential?.accessToken;
+
+      // Dual-Auth safety: if Firebase popup credential did not return accessToken,
+      // fallback to active GIS token if valid
+      if (!accessToken) {
+        const stateToken = GoogleAuthService.getActiveToken();
+        if (stateToken) {
+          accessToken = stateToken;
+        }
+      }
 
       const userEmail = user.email || '';
       const userName = user.displayName || userEmail.split('@')[0] || 'User';
@@ -192,11 +201,11 @@ export class FirebaseAuthService {
       StorageService.saveGoogleDriveState(driveState);
       GoogleAuthService.setAuthenticated(true);
 
-      // Proactively create Tasker_Media folder in user's root Google Drive & sync vault
+      // Proactively create Tasker_Media folder and all 8 typed subfolders in user's root Google Drive & sync vault
       if (accessToken) {
         try {
-          const folderId = await GoogleAuthService.initDriveFolder(accessToken);
-          console.log('Firebase Auth -> Created Google Drive Media Folder:', folderId);
+          const folders = await GoogleAuthService.verifyOrCreateAllDriveFolders(accessToken);
+          console.log('Firebase Auth -> Created Google Drive Media Folders:', folders);
         } catch (folderErr) {
           console.warn('Firebase Auth folder initialization:', folderErr);
         }
@@ -223,6 +232,24 @@ export class FirebaseAuthService {
       }
       throw new Error(error.message || 'Firebase Google Sign-In failed.');
     }
+  }
+
+  /**
+   * Immediate 1-click token re-prompt if Google Drive OAuth access token is missing or expired.
+   */
+  static async repromptGoogleToken(): Promise<string> {
+    try {
+      const res = await this.signInWithGoogle();
+      if (res.accessToken) return res.accessToken;
+    } catch (fbErr) {
+      console.warn('Firebase re-prompt attempt error, falling back to GIS direct consent:', fbErr);
+    }
+
+    // Direct GIS fallback
+    const acc = await GoogleAuthService.requestRealGoogleOAuth();
+    if (acc.accessToken) return acc.accessToken;
+
+    throw new Error('Could not obtain a valid Google Drive access token.');
   }
 
   /**

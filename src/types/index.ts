@@ -13,7 +13,9 @@ export interface FileAttachment {
   size: number;
   type: string;
   dataUrl?: string; // base64 or blob url
-  driveId?: string; // Google Drive file ID if synced
+  driveId?: string; // Google Drive file ID ONLY if successfully synced to Drive
+  uploadError?: string; // Real Google Drive error message if upload failed
+  category?: string; // Subfolder category (e.g. Videos, Documents, Images, etc.)
   hash: string; // SHA-256 content hash for deduplication
   uploadedAt: string;
 }
@@ -91,6 +93,8 @@ export interface DeduplicatedFileRegistry {
     type: string;
     dataUrl?: string;
     driveId?: string;
+    uploadError?: string;
+    category?: string;
     firstDate: string;
     datesUsed: string[];
     updatedAt: string;
@@ -158,6 +162,7 @@ export interface GoogleDriveState {
   userName?: string;
   userAvatar?: string;
   folderId?: string;
+  subfolderIds?: Record<string, string>;
   lastSyncedAt?: string;
   isSyncing: boolean;
   accounts: GoogleAccount[];

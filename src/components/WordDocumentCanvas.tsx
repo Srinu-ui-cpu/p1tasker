@@ -394,7 +394,11 @@ export const WordDocumentCanvas: React.FC<WordDocumentCanvasProps> = ({
                               <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
                                 <span>{(att.size / 1024).toFixed(0)} KB</span>
                                 <span>&bull;</span>
-                                <span className="text-emerald-400 font-semibold">Drive</span>
+                                {att.driveId && !att.driveId.startsWith('file-') ? (
+                                  <span className="text-emerald-400 font-semibold">Drive</span>
+                                ) : (
+                                  <span className="text-amber-400 font-semibold" title={att.uploadError || "Local Storage Only"}>Local Only</span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -485,7 +489,9 @@ export const WordDocumentCanvas: React.FC<WordDocumentCanvasProps> = ({
                               </div>
                               <div className="min-w-0">
                                 <span className="text-xs font-bold text-white truncate block max-w-[180px]">{att.name}</span>
-                                <span className="text-[10px] text-slate-400 font-mono">{(att.size / 1024).toFixed(0)} KB &bull; Google Drive</span>
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  {(att.size / 1024).toFixed(0)} KB &bull; {att.driveId && !att.driveId.startsWith('file-') ? 'Google Drive' : 'Local Only'}
+                                </span>
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5">

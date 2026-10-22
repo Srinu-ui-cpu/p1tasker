@@ -328,6 +328,12 @@ export class StorageService {
       existing.updatedAt = new Date().toISOString();
       if (dataUrl) existing.dataUrl = dataUrl;
       existing.name = file.name;
+      
+      // Cleanse any legacy fake driveId
+      if (existing.driveId && (existing.driveId.startsWith('file-') || existing.driveId.length < 15)) {
+        delete existing.driveId;
+      }
+      
       registry[hash] = existing;
     } else {
       registry[hash] = {
@@ -344,12 +350,22 @@ export class StorageService {
 
     this.saveFileRegistry(registry);
 
+    const existingReg = registry[hash];
+    const isAuthenticDriveId = !!(
+      existingReg?.driveId &&
+      !existingReg.driveId.startsWith('file-') &&
+      /^[a-zA-Z0-9_-]{15,}$/.test(existingReg.driveId)
+    );
+
     const attachment: FileAttachment = {
       id: `file-${hash.slice(0, 12)}`,
       name: file.name,
       size: file.size,
       type: file.type,
       dataUrl,
+      // ZERO FAKING: Only real Google Drive file IDs are retained. Never assign file-... as driveId.
+      driveId: isAuthenticDriveId ? existingReg.driveId : undefined,
+      uploadError: isAuthenticDriveId ? undefined : existingReg?.uploadError,
       hash,
       uploadedAt: new Date().toISOString(),
     };

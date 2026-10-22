@@ -27,7 +27,9 @@ import {
   CheckCircle2,
   Languages,
   ListCollapse,
-  Copy
+  Copy,
+  AlertCircle,
+  Upload
 } from 'lucide-react';
 import { DiaryEntry, FileAttachment } from '../types';
 import { StorageService } from '../services/storageService';
@@ -315,6 +317,7 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
   const handleInsertMediaFile = async (file: File, insertAfterIndex?: number) => {
     try {
       let driveUploaded: { fileId: string; webViewLink?: string } | null = null;
+      let driveError: string | null = null;
 
       // Direct Resumable Google Drive Upload with live Progress Bar
       if (GoogleAuthService.isAuthenticated()) {
@@ -347,15 +350,35 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
           });
         } catch (uploadErr: unknown) {
           const err = uploadErr as Error;
-          setAiNotification(`Drive upload notice: ${err.message}`);
+          driveError = err.message || 'Drive upload failed';
+          setAiNotification(`Drive upload failed: ${err.message}`);
         } finally {
           setTimeout(() => setUploadProgress(null), 1200);
         }
+      } else {
+        driveError = 'Google Drive not connected. Stored in local storage only.';
       }
 
       const { attachment } = await StorageService.attachFileToDate(file, currentDate);
-      if (driveUploaded?.fileId) {
-        attachment.driveId = driveUploaded.fileId;
+      const isAuthentic = !!(driveUploaded?.fileId && !driveUploaded.fileId.startsWith('file-'));
+
+      if (isAuthentic) {
+        attachment.driveId = driveUploaded!.fileId;
+        attachment.uploadError = undefined;
+      } else {
+        attachment.driveId = undefined;
+        if (driveError) {
+          attachment.uploadError = driveError;
+        }
+      }
+
+      // Update registry with real status
+      const registry = StorageService.getFileRegistry();
+      if (registry[attachment.hash]) {
+        registry[attachment.hash].driveId = attachment.driveId;
+        registry[attachment.hash].uploadError = attachment.uploadError;
+        registry[attachment.hash].category = GoogleAuthService.categorizeFile(file.name, file.type);
+        StorageService.saveFileRegistry(registry);
       }
 
       // Splicing inline tag {{attachment:<id>}} at cursor position, after block, or appending
@@ -390,10 +413,10 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
       setEntry(updated);
       StorageService.saveDiaryForDate(updated);
 
-      if (driveUploaded?.fileId) {
-        setAiNotification(`✓ Uploaded "${file.name}" directly to Google Drive!`);
+      if (attachment.driveId) {
+        setAiNotification(`✓ Uploaded "${file.name}" to Google Drive (${GoogleAuthService.categorizeFile(file.name, file.type)})!`);
       } else {
-        setAiNotification(`Attached "${file.name}" to diary!`);
+        setAiNotification(`Saved "${file.name}" locally. (Drive upload not completed: ${attachment.uploadError || 'Pending'})`);
       }
       setTimeout(() => setAiNotification(null), 3500);
 
@@ -405,6 +428,71 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
       const error = err as Error;
       setUploadProgress(null);
       setAiNotification(`Attachment notice: ${error.message || 'Saved locally'}`);
+      setTimeout(() => setAiNotification(null), 4000);
+    }
+  };
+
+  // --- 🔄 RETRY FAILED OR PENDING GOOGLE DRIVE UPLOAD ---
+  const handleRetryUpload = async (att: FileAttachment) => {
+    if (!GoogleAuthService.isAuthenticated()) {
+      setAiNotification('Google Drive is not connected. Opening Google Sign-In...');
+      try {
+        await GoogleAuthService.requestRealGoogleOAuth();
+      } catch (authErr: any) {
+        setAiNotification(`Google login failed: ${authErr.message || authErr}`);
+        return;
+      }
+    }
+
+    setAiNotification(`Retrying Google Drive upload for "${att.name}"...`);
+    try {
+      let uploaded: { fileId: string; webViewLink?: string } | null = null;
+      if (att.dataUrl && att.dataUrl.startsWith('data:')) {
+        const res = await fetch(att.dataUrl);
+        const blob = await res.blob();
+        uploaded = await GoogleAuthService.uploadMediaFile(blob, att.name, att.type);
+      } else {
+        setAiNotification(`Please re-upload "${att.name}" from your device to stream it directly to Google Drive.`);
+        return;
+      }
+
+      if (uploaded?.fileId && !uploaded.fileId.startsWith('file-')) {
+        const updatedAttachments = entry.attachments.map(a =>
+          a.id === att.id ? { ...a, driveId: uploaded!.fileId, uploadError: undefined } : a
+        );
+        const updatedEntry: DiaryEntry = {
+          ...entry,
+          attachments: updatedAttachments,
+          updatedAt: new Date().toISOString(),
+        };
+        setEntry(updatedEntry);
+        StorageService.saveDiaryForDate(updatedEntry);
+
+        const registry = StorageService.getFileRegistry();
+        if (registry[att.hash]) {
+          registry[att.hash].driveId = uploaded.fileId;
+          registry[att.hash].uploadError = undefined;
+          StorageService.saveFileRegistry(registry);
+        }
+
+        setAiNotification(`✓ "${att.name}" successfully uploaded to Google Drive!`);
+      } else {
+        throw new Error('Google Drive upload did not return a valid file ID');
+      }
+    } catch (err: any) {
+      const errMsg = err.message || 'Upload failed';
+      const updatedAttachments = entry.attachments.map(a =>
+        a.id === att.id ? { ...a, uploadError: errMsg } : a
+      );
+      const updatedEntry: DiaryEntry = {
+        ...entry,
+        attachments: updatedAttachments,
+        updatedAt: new Date().toISOString(),
+      };
+      setEntry(updatedEntry);
+      StorageService.saveDiaryForDate(updatedEntry);
+      setAiNotification(`Upload retry failed: ${errMsg}`);
+    } finally {
       setTimeout(() => setAiNotification(null), 4000);
     }
   };
@@ -756,10 +844,16 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 pt-1">
             {entry.attachments.map((file) => {
               const isImage = file.type.startsWith('image/');
+              const hasDrive = !!(
+                file.driveId && 
+                !file.driveId.startsWith('file-') && 
+                /^[a-zA-Z0-9_-]{15,}$/.test(file.driveId)
+              );
+
               return (
                 <div 
                   key={file.id}
-                  className="rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-md hover:border-indigo-600/70 transition flex flex-col group"
+                  className={`rounded-2xl border ${hasDrive ? 'border-slate-800' : 'border-amber-800/60'} bg-slate-950 overflow-hidden shadow-md hover:border-indigo-600/70 transition flex flex-col group`}
                 >
                   {/* Thumbnail / Header Area */}
                   <div 
@@ -799,10 +893,41 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
                       </span>
                       <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono mt-1">
                         <span>{(file.size / 1024).toFixed(0)} KB</span>
-                        <span className="text-emerald-400 flex items-center gap-0.5">
-                          <Cloud className="w-2.5 h-2.5" /> Drive
-                        </span>
+                        {hasDrive ? (
+                          <span className="text-emerald-400 flex items-center gap-0.5" title="Uploaded to Google Drive">
+                            <Cloud className="w-2.5 h-2.5" /> Drive
+                          </span>
+                        ) : (
+                          <span className="text-amber-400 flex items-center gap-0.5" title="Local browser storage only">
+                            <AlertCircle className="w-2.5 h-2.5" /> Local Only
+                          </span>
+                        )}
                       </div>
+
+                      {/* Explicit Zero-Faking Drive Status Alert */}
+                      {!hasDrive && (
+                        <div className="mt-2 p-1.5 rounded-lg bg-amber-950/50 border border-amber-800/50 text-[10px] space-y-1">
+                          <div className="flex items-center justify-between text-amber-300">
+                            <span className="font-semibold text-[10px]">Local Storage Only (Not uploaded to Google Drive)</span>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleRetryUpload(file);
+                              }}
+                              className="text-indigo-300 hover:text-white underline font-bold shrink-0 ml-1 cursor-pointer"
+                              title="Upload to Google Drive"
+                            >
+                              Retry
+                            </button>
+                          </div>
+                          {file.uploadError && (
+                            <p className="text-[9px] text-rose-400/90 font-mono truncate" title={file.uploadError}>
+                              {file.uploadError}
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center justify-between pt-2 border-t border-slate-800/80">
@@ -843,6 +968,7 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
         attachment={viewerAttachment}
         onClose={() => setViewerAttachment(null)}
         date={currentDate}
+        onRetryUpload={handleRetryUpload}
       />
 
       {/* 2. In-Diary AI Chatbot Modal (Analyze current diary, analyze docs, or generate & paste) */}

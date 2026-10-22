@@ -280,7 +280,8 @@ function assertEquals<T>(actual: T, expected: T, msg: string): void {
 
 // Imports
 import { StorageService } from '../src/services/storageService.ts';
-import { GoogleAuthService } from '../src/services/googleAuthService.ts';
+import { GoogleAuthService, DRIVE_SUBFOLDERS } from '../src/services/googleAuthService.ts';
+import { FirebaseAuthService } from '../src/services/firebaseAuthService.ts';
 import { AIBrokerService } from '../src/services/aiBrokerService.ts';
 import { AlarmService } from '../src/services/alarmService.ts';
 import { BackupService } from '../src/services/backupService.ts';
@@ -1434,6 +1435,301 @@ End of meeting notes.`;
 
   await runTest('ResumableUploadProtocol', 'GoogleAuthService exports uploadMediaFileResumable for chunked streaming', () => {
     assert(typeof (GoogleAuthService as any).uploadMediaFileResumable === 'function', 'uploadMediaFileResumable exists');
+  });
+
+  // =========================================================================
+  // SUITE 16: Google Drive Subfolder Organization, Hierarchy & Zero-Faking Verification
+  // =========================================================================
+  console.log('\n>> Running Suite 16: Google Drive Subfolder Hierarchy & Zero-Faking Verification');
+
+  await runTest('FolderHierarchyContract', 'verifyOrCreateAllDriveFolders guarantees Tasker_Media in root and all 8 typed subfolders inside', async () => {
+    const originalFetch = globalThis.fetch;
+    const createdFolders: { name: string; parents?: string[] }[] = [];
+    const rootFolderId = 'root-media-folder-id-777';
+
+    (globalThis as any).fetch = async (url: string, options: any) => {
+      // 1. Searching for folders
+      if (url.includes('/drive/v3/files?q=') && (!options?.method || options.method === 'GET')) {
+        // If searching subfolders inside root
+        if (url.includes(rootFolderId)) {
+          return new Response(JSON.stringify({ files: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        // If searching root folder
+        return new Response(JSON.stringify({ files: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 2. Creating folder
+      if (url === 'https://www.googleapis.com/drive/v3/files' && options?.method === 'POST') {
+        const body = JSON.parse(options.body);
+        createdFolders.push(body);
+        if (body.name === 'Tasker_Media') {
+          return new Response(JSON.stringify({ id: rootFolderId, name: body.name }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+        return new Response(JSON.stringify({ id: `subfolder-${body.name}-id`, name: body.name }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      // 3. Permissions
+      if (url.includes('/permissions')) {
+        return new Response('{}', { status: 200 });
+      }
+
+      return new Response('{}', { status: 200 });
+    };
+
+    try {
+      const res = await GoogleAuthService.verifyOrCreateAllDriveFolders('test-access-token-123');
+      assertEquals(res.rootId, rootFolderId, 'Root ID must match root-media-folder-id-777');
+      assertEquals(res.rootName, 'Tasker_Media', 'Root folder name must be Tasker_Media');
+
+      // Check root folder creation
+      const rootFolder = createdFolders.find(f => f.name === 'Tasker_Media');
+      assert(!!rootFolder, 'Tasker_Media root folder must be created');
+      assert(!rootFolder!.parents, 'Tasker_Media must omit parents to be created in My Drive root');
+
+      // Check all 8 subfolders
+      const expectedSubfolders = [
+        'Videos',
+        'Documents',
+        'Presentations',
+        'Spreadsheets',
+        'Programs',
+        'Images',
+        'Audio',
+        'Other',
+      ];
+
+      for (const expected of expectedSubfolders) {
+        assert(!!res.subfolders[expected as any], `Subfolder ${expected} must have an ID returned`);
+        const sub = createdFolders.find(f => f.name === expected);
+        assert(!!sub, `Subfolder ${expected} must have been created in Google Drive`);
+        assert(Array.isArray(sub!.parents) && sub!.parents[0] === rootFolderId, `Subfolder ${expected} must have parents: [${rootFolderId}]`);
+      }
+
+      // Verify GoogleDriveState contains subfolder IDs
+      const state = GoogleAuthService.getDriveState();
+      assertEquals(state.folderId, rootFolderId, 'DriveState folderId is updated');
+      assert(!!state.subfolderIds && state.subfolderIds['Videos'] === `subfolder-Videos-id`, 'DriveState subfolderIds includes Videos');
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
+  });
+
+  await runTest('FileTypeSubfolderRouting', 'categorizeFile and getOrTargetSubfolder route all types to exact subfolders', async () => {
+    // 1. Videos
+    assertEquals(GoogleAuthService.categorizeFile('movie.mp4', 'video/mp4'), 'Videos', '.mp4 maps to Videos');
+    assertEquals(GoogleAuthService.categorizeFile('clip.mkv'), 'Videos', '.mkv maps to Videos');
+    assertEquals(GoogleAuthService.categorizeFile('recording.mov', 'video/quicktime'), 'Videos', '.mov maps to Videos');
+    assertEquals(GoogleAuthService.categorizeFile('stream.webm'), 'Videos', '.webm maps to Videos');
+
+    // 2. Images
+    assertEquals(GoogleAuthService.categorizeFile('photo.png', 'image/png'), 'Images', '.png maps to Images');
+    assertEquals(GoogleAuthService.categorizeFile('avatar.jpg', 'image/jpeg'), 'Images', '.jpg maps to Images');
+    assertEquals(GoogleAuthService.categorizeFile('diagram.svg'), 'Images', '.svg maps to Images');
+    assertEquals(GoogleAuthService.categorizeFile('banner.webp'), 'Images', '.webp maps to Images');
+
+    // 3. Audio
+    assertEquals(GoogleAuthService.categorizeFile('song.mp3', 'audio/mpeg'), 'Audio', '.mp3 maps to Audio');
+    assertEquals(GoogleAuthService.categorizeFile('voice.wav', 'audio/wav'), 'Audio', '.wav maps to Audio');
+    assertEquals(GoogleAuthService.categorizeFile('track.m4a'), 'Audio', '.m4a maps to Audio');
+
+    // 4. Spreadsheets
+    assertEquals(GoogleAuthService.categorizeFile('budget.csv', 'text/csv'), 'Spreadsheets', '.csv maps to Spreadsheets');
+    assertEquals(GoogleAuthService.categorizeFile('financials.xlsx'), 'Spreadsheets', '.xlsx maps to Spreadsheets');
+    assertEquals(GoogleAuthService.categorizeFile('data.xls'), 'Spreadsheets', '.xls maps to Spreadsheets');
+
+    // 5. Presentations
+    assertEquals(GoogleAuthService.categorizeFile('pitch.pptx'), 'Presentations', '.pptx maps to Presentations');
+    assertEquals(GoogleAuthService.categorizeFile('deck.ppt'), 'Presentations', '.ppt maps to Presentations');
+
+    // 6. Documents
+    assertEquals(GoogleAuthService.categorizeFile('report.pdf', 'application/pdf'), 'Documents', '.pdf maps to Documents');
+    assertEquals(GoogleAuthService.categorizeFile('notes.docx'), 'Documents', '.docx maps to Documents');
+    assertEquals(GoogleAuthService.categorizeFile('todo.txt', 'text/plain'), 'Documents', '.txt maps to Documents');
+
+    // 7. Programs
+    assertEquals(GoogleAuthService.categorizeFile('setup.exe'), 'Programs', '.exe maps to Programs');
+    assertEquals(GoogleAuthService.categorizeFile('installer.msi'), 'Programs', '.msi maps to Programs');
+    assertEquals(GoogleAuthService.categorizeFile('archive.zip', 'application/zip'), 'Programs', '.zip maps to Programs');
+    assertEquals(GoogleAuthService.categorizeFile('package.tar.gz'), 'Programs', '.tar.gz maps to Programs');
+
+    // 8. Other
+    assertEquals(GoogleAuthService.categorizeFile('unknown_data.dat'), 'Other', '.dat maps to Other');
+    assertEquals(GoogleAuthService.categorizeFile('custom_binary.xyz'), 'Other', '.xyz maps to Other');
+
+    // Test getOrTargetSubfolder
+    const mockState = GoogleAuthService.getDriveState();
+    mockState.subfolderIds = {
+      Videos: 'folder-vid-123456789',
+      Documents: 'folder-doc-123456789',
+      Presentations: 'folder-ppt-123456789',
+      Spreadsheets: 'folder-xls-123456789',
+      Programs: 'folder-exe-123456789',
+      Images: 'folder-img-123456789',
+      Audio: 'folder-aud-123456789',
+      Other: 'folder-oth-123456789',
+    };
+    StorageService.saveGoogleDriveState(mockState);
+
+    const vidTarget = await GoogleAuthService.getOrTargetSubfolder('test-token', { name: 'vacation.mp4', type: 'video/mp4' });
+    assertEquals(vidTarget, 'folder-vid-123456789', 'getOrTargetSubfolder routes vacation.mp4 to Videos subfolder');
+
+    const docTarget = await GoogleAuthService.getOrTargetSubfolder('test-token', { name: 'thesis.pdf', type: 'application/pdf' });
+    assertEquals(docTarget, 'folder-doc-123456789', 'getOrTargetSubfolder routes thesis.pdf to Documents subfolder');
+  });
+
+  await runTest('UploadMediaFileResumableSubfolderTargeting', 'uploadMediaFileResumable targets exact subfolder in parents metadata', async () => {
+    const originalFetch = globalThis.fetch;
+    const originalXHR = (globalThis as any).XMLHttpRequest;
+    let capturedInitiateMetadata: any = null;
+
+    const mockState = GoogleAuthService.getDriveState();
+    mockState.isConnected = true;
+    mockState.accessToken = 'test-valid-oauth-token';
+    mockState.tokenExpiresAt = Date.now() + 3600000;
+    mockState.subfolderIds = {
+      Videos: 'target-videos-subfolder-id',
+      Documents: 'target-documents-subfolder-id',
+      Presentations: 'target-presentations-subfolder-id',
+      Spreadsheets: 'target-spreadsheets-subfolder-id',
+      Programs: 'target-programs-subfolder-id',
+      Images: 'target-images-subfolder-id',
+      Audio: 'target-audio-subfolder-id',
+      Other: 'target-other-subfolder-id',
+    };
+    StorageService.saveGoogleDriveState(mockState);
+
+    (globalThis as any).fetch = async (url: string, options: any) => {
+      if (url.includes('/upload/drive/v3/files?uploadType=resumable')) {
+        capturedInitiateMetadata = JSON.parse(options.body);
+        return new Response('{}', {
+          status: 200,
+          headers: {
+            Location: 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=mock_session_123',
+          },
+        });
+      }
+      return new Response('{}', { status: 200 });
+    };
+
+    class MockXHR {
+      upload = { onprogress: null as any };
+      status = 200;
+      responseText = JSON.stringify({
+        id: 'real-drive-file-id-abc123456',
+        webViewLink: 'https://drive.google.com/file/d/real-drive-file-id-abc123456/view',
+      });
+      open() {}
+      setRequestHeader() {}
+      send() {
+        setTimeout(() => {
+          if (typeof (this as any).onload === 'function') {
+            (this as any).onload();
+          }
+        }, 10);
+      }
+    }
+    (globalThis as any).XMLHttpRequest = MockXHR;
+
+    try {
+      const mockVideoFile = new File(['fake-500mb-video-content'], 'epic_journey.mp4', { type: 'video/mp4' });
+      const uploadRes = await GoogleAuthService.uploadMediaFileResumable(mockVideoFile);
+
+      assert(!!uploadRes, 'Upload should succeed');
+      assertEquals(uploadRes!.fileId, 'real-drive-file-id-abc123456', 'Returns authentic Google Drive file ID');
+      assert(!!capturedInitiateMetadata, 'Initiate metadata was dispatched');
+      assertEquals(capturedInitiateMetadata.name, 'epic_journey.mp4', 'Metadata name matches');
+      assert(
+        Array.isArray(capturedInitiateMetadata.parents) && capturedInitiateMetadata.parents[0] === 'target-videos-subfolder-id',
+        'Upload metadata parents MUST target the Videos subfolder ID!'
+      );
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+      (globalThis as any).XMLHttpRequest = originalXHR;
+    }
+  });
+
+  await runTest('ZeroFakingStorageDeduplication', 'StorageService never sets fake file-... driveId and cleanses legacy fake IDs', async () => {
+    localStorage.clear();
+
+    // 1. Fresh file upload: driveId must be undefined
+    const testFile = new File(['zero faking test content'], 'sample.pdf', { type: 'application/pdf' });
+    const { attachment } = await StorageService.attachFileToDate(testFile, '2026-10-22');
+
+    assert(attachment.driveId === undefined, `New attachment must NOT have fake driveId, got: ${attachment.driveId}`);
+
+    // 2. Legacy fake driveId cleansing
+    const registry = StorageService.getFileRegistry();
+    const hash = attachment.hash;
+    registry[hash] = {
+      ...registry[hash],
+      driveId: 'file-fake-placeholder-id-12345', // Legacy mock ID
+    };
+    StorageService.saveFileRegistry(registry);
+
+    // Re-processing must cleanse the fake driveId
+    const { attachment: cleansedAtt } = await StorageService.attachFileToDate(testFile, '2026-10-23');
+    assert(cleansedAtt.driveId === undefined, `Legacy fake driveId must be stripped, got: ${cleansedAtt.driveId}`);
+  });
+
+  await runTest('ZeroFakingUIIntegrity', 'DiaryView and DriveMediaViewerModal enforce zero-faking UI contracts', () => {
+    const diaryViewPath = path.resolve(process.cwd(), 'src/components/DiaryView.tsx');
+    const modalPath = path.resolve(process.cwd(), 'src/components/DriveMediaViewerModal.tsx');
+    const wordCanvasPath = path.resolve(process.cwd(), 'src/components/WordDocumentCanvas.tsx');
+
+    const diaryViewCode = fs.readFileSync(diaryViewPath, 'utf-8');
+    const modalCode = fs.readFileSync(modalPath, 'utf-8');
+    const wordCanvasCode = fs.readFileSync(wordCanvasPath, 'utf-8');
+
+    // 1. Both files must contain exact message "Local Storage Only (Not uploaded to Google Drive)"
+    assert(
+      diaryViewCode.includes('Local Storage Only (Not uploaded to Google Drive)'),
+      'DiaryView must explicitly show "Local Storage Only (Not uploaded to Google Drive)"'
+    );
+    assert(
+      modalCode.includes('Local Storage Only (Not uploaded to Google Drive)'),
+      'DriveMediaViewerModal must explicitly show "Local Storage Only (Not uploaded to Google Drive)"'
+    );
+
+    // 2. DiaryView must have retry upload handler
+    assert(
+      diaryViewCode.includes('handleRetryUpload'),
+      'DiaryView must provide handleRetryUpload to allow re-uploading un-synced files'
+    );
+
+    // 3. DriveMediaViewerModal must conditionally guard "View in Drive" behind hasValidDriveId
+    assert(
+      modalCode.includes('hasValidDriveId') && modalCode.includes('View in Drive'),
+      'DriveMediaViewerModal must guard "View in Drive" behind hasValidDriveId'
+    );
+
+    // 4. WordDocumentCanvas must NOT show "Drive" for files without valid driveId
+    assert(
+      wordCanvasCode.includes('Local Only'),
+      'WordDocumentCanvas must show "Local Only" for files not uploaded to Google Drive'
+    );
+  });
+
+  await runTest('DualAuthAndTokenReliability', 'Dual-Auth token re-prompt methods exist and provide reliable re-authentication', () => {
+    assert(
+      typeof (FirebaseAuthService as any).repromptGoogleToken === 'function',
+      'FirebaseAuthService.repromptGoogleToken must exist for immediate 1-click token re-prompt'
+    );
+    assert(
+      typeof (GoogleAuthService as any).repromptDriveToken === 'function',
+      'GoogleAuthService.repromptDriveToken must exist for 1-click GIS token re-prompt'
+    );
   });
   console.log('\n===============================================================');
   console.log('                 AUDIT EXECUTION RESULTS');

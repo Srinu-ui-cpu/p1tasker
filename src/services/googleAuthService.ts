@@ -2,6 +2,33 @@ import { GoogleAccount, GoogleDriveState, UploadProgress } from '../types';
 export type { UploadProgress };
 import { StorageService } from './storageService';
 
+export type MediaCategory =
+  | 'Videos'
+  | 'Documents'
+  | 'Presentations'
+  | 'Spreadsheets'
+  | 'Programs'
+  | 'Images'
+  | 'Audio'
+  | 'Other';
+
+export const DRIVE_SUBFOLDERS: readonly MediaCategory[] = [
+  'Videos',
+  'Documents',
+  'Presentations',
+  'Spreadsheets',
+  'Programs',
+  'Images',
+  'Audio',
+  'Other',
+] as const;
+
+export interface DriveFolderStructure {
+  rootId: string;
+  rootName: string;
+  subfolders: Record<MediaCategory, string>;
+}
+
 declare global {
   interface Window {
     google?: {
@@ -238,10 +265,10 @@ export class GoogleAuthService {
               StorageService.saveGoogleDriveState(state);
               this.setAuthenticated(true);
 
-              // Proactively create Tasker_Media folder in user's Google Drive
+              // Proactively create Tasker_Media folder and all 8 typed subfolders in user's Google Drive
               try {
-                const folderId = await this.initDriveFolder(tokenResponse.access_token);
-                console.log('Tasker Google Drive Media folder initialized:', folderId);
+                const folders = await this.verifyOrCreateAllDriveFolders(tokenResponse.access_token);
+                console.log('Tasker Google Drive Media folders initialized:', folders);
               } catch (folderErr) {
                 console.warn('Initial drive folder check warning:', folderErr);
               }
@@ -484,28 +511,111 @@ export class GoogleAuthService {
   }
 
   /**
-   * Returns the direct web URL to the user's Tasker App Data folder in Google Drive.
+   * Intelligently maps filename extension and mime-type to its designated subfolder:
+   * - Videos (video/*, .mp4, .mkv, .mov, .avi, etc.)
+   * - Documents (doc, docx, pdf, txt, etc.)
+   * - Presentations (ppt, pptx, etc.)
+   * - Spreadsheets (xls, xlsx, csv, etc.)
+   * - Programs (exe, msi, zip, rar, etc.)
+   * - Images (image/*, png, jpg, etc.)
+   * - Audio (audio/*, mp3, wav, etc.)
+   * - Other (all unmapped types)
+   */
+  static categorizeFile(filename: string, mimeType?: string): MediaCategory {
+    const ext = filename && filename.includes('.') ? filename.split('.').pop()!.toLowerCase().trim() : '';
+    const mime = (mimeType || '').toLowerCase().trim();
+
+    // 1. Videos
+    if (
+      mime.startsWith('video/') ||
+      ['mp4', 'mkv', 'mov', 'avi', 'webm', 'flv', 'wmv', 'm4v', '3gp', 'ts', 'ogv'].includes(ext)
+    ) {
+      return 'Videos';
+    }
+
+    // 2. Images
+    if (
+      mime.startsWith('image/') ||
+      ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff', 'tif', 'heic', 'avif'].includes(ext)
+    ) {
+      return 'Images';
+    }
+
+    // 3. Audio
+    if (
+      mime.startsWith('audio/') ||
+      ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac', 'wma', 'opus', 'mid', 'midi'].includes(ext)
+    ) {
+      return 'Audio';
+    }
+
+    // 4. Spreadsheets (checked before generic documents so .csv routes here)
+    if (
+      mime === 'text/csv' ||
+      mime.includes('spreadsheet') ||
+      mime.includes('excel') ||
+      ['xls', 'xlsx', 'csv', 'ods', 'tsv', 'numbers', 'xlsm'].includes(ext)
+    ) {
+      return 'Spreadsheets';
+    }
+
+    // 5. Presentations (checked before generic documents so .ppt/.pptx routes here)
+    if (
+      mime.includes('presentation') ||
+      mime.includes('powerpoint') ||
+      ['ppt', 'pptx', 'odp', 'key', 'pps', 'ppsx'].includes(ext)
+    ) {
+      return 'Presentations';
+    }
+
+    // 6. Documents
+    if (
+      mime === 'application/pdf' ||
+      mime.includes('word') ||
+      mime.includes('document') ||
+      mime.startsWith('text/') ||
+      ['doc', 'docx', 'pdf', 'txt', 'rtf', 'odt', 'md', 'pages', 'tex', 'epub'].includes(ext)
+    ) {
+      return 'Documents';
+    }
+
+    // 7. Programs / Executables / Archives
+    if (
+      mime.includes('zip') ||
+      mime.includes('compressed') ||
+      mime.includes('tar') ||
+      mime.includes('x-rar') ||
+      mime.includes('x-7z') ||
+      [
+        'exe', 'msi', 'zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'dmg',
+        'deb', 'rpm', 'apk', 'bin', 'iso', 'sh', 'bat', 'cmd', 'ps1', 'jar'
+      ].includes(ext)
+    ) {
+      return 'Programs';
+    }
+
+    return 'Other';
+  }
+
+  /**
+   * Returns the direct web URL to the user's Tasker_Media folder or specific subfolder in Google Drive.
    * If folder has not yet been assigned a real Google Drive ID, points directly to My Drive root.
    */
-  static getDriveFolderUrl(): string {
+  static getDriveFolderUrl(subfolderCategory?: MediaCategory): string {
     const state = this.getDriveState();
-    if (state.folderId && !state.folderId.includes('tasker-app-data-vault') && /^[a-zA-Z0-9_-]{20,}$/.test(state.folderId)) {
+    if (subfolderCategory && state.subfolderIds?.[subfolderCategory] && /^[a-zA-Z0-9_-]{15,}$/.test(state.subfolderIds[subfolderCategory])) {
+      return `https://drive.google.com/drive/folders/${state.subfolderIds[subfolderCategory]}`;
+    }
+    if (state.folderId && !state.folderId.includes('tasker-app-data-vault') && /^[a-zA-Z0-9_-]{15,}$/.test(state.folderId)) {
       return `https://drive.google.com/drive/folders/${state.folderId}`;
     }
     return `https://drive.google.com/drive/u/0/my-drive`;
   }
 
   /**
-   * Checks or creates the visible `Tasker App Data` folder in user's root Google Drive.
-   * Makes the folder viewable so anyone with the link can see media files inside,
-   * while private diary text and tasks are stored safely in hidden appDataFolder.
-   */
-  /**
-   * Checks or creates the visible media folder in user's Google Drive.
-   * Based on proven architecture from TraceYourself production engine:
-   * - Searches directly for folder
-   * - Creates folder without explicit parents array so Drive v3 defaults cleanly to root without 404s
-   * - Applies reader permission so media is publicly viewable
+   * Guarantees folder Tasker_Media is created in My Drive root.
+   * Creates folder without explicit parents array so Drive v3 defaults cleanly to root without 404s.
+   * Applies reader permission so media is publicly viewable.
    */
   static async initDriveFolder(accessToken: string): Promise<string> {
     try {
@@ -542,7 +652,7 @@ export class GoogleAuthService {
         }
       }
 
-      // Create new folder (omit parents so Drive v3 creates it in My Drive root without 404 'root' error)
+      // Create new folder in My Drive root (omitting parents so Drive v3 creates it in My Drive root without 404 'root' error)
       const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
         method: 'POST',
         headers: {
@@ -589,7 +699,132 @@ export class GoogleAuthService {
   }
 
   /**
-   * Ensures the visible `Tasker App Data` folder exists on Google Drive, creating it if needed.
+   * Verifies that root Tasker_Media and all 8 typed subfolders exist:
+   * Videos, Documents, Presentations, Spreadsheets, Programs, Images, Audio, Other.
+   * Creates any that are missing inside Tasker_Media, sets public reader permissions,
+   * updates GoogleDriveState.subfolderIds, and returns the full folder structure.
+   */
+  static async verifyOrCreateAllDriveFolders(accessToken: string): Promise<DriveFolderStructure> {
+    const rootId = await this.initDriveFolder(accessToken);
+    const subfolderMap: Record<MediaCategory, string> = {
+      Videos: rootId,
+      Documents: rootId,
+      Presentations: rootId,
+      Spreadsheets: rootId,
+      Programs: rootId,
+      Images: rootId,
+      Audio: rootId,
+      Other: rootId,
+    };
+
+    try {
+      // 1. Fetch all existing subfolders directly inside rootId
+      const query = encodeURIComponent(`'${rootId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+      const listRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      const existingMap = new Map<string, string>();
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        if (Array.isArray(listData.files)) {
+          for (const item of listData.files) {
+            existingMap.set(item.name, item.id);
+          }
+        }
+      }
+
+      // 2. Verify or create each of the 8 required subfolders
+      for (const category of DRIVE_SUBFOLDERS) {
+        if (existingMap.has(category)) {
+          subfolderMap[category] = existingMap.get(category)!;
+        } else {
+          try {
+            const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                name: category,
+                mimeType: 'application/vnd.google-apps.folder',
+                parents: [rootId],
+                description: `Tasker OS ${category} Vault`,
+              }),
+            });
+
+            if (createRes.ok) {
+              const created = await createRes.json();
+              subfolderMap[category] = created.id;
+
+              // Ensure public reader permission for media accessibility
+              try {
+                await fetch(`https://www.googleapis.com/drive/v3/files/${created.id}/permissions`, {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${accessToken}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+                });
+              } catch {
+                // ignore
+              }
+            } else {
+              subfolderMap[category] = rootId;
+            }
+          } catch (createErr) {
+            console.warn(`Failed creating subfolder ${category}:`, createErr);
+            subfolderMap[category] = rootId;
+          }
+        }
+      }
+
+      // Save subfolder mapping into GoogleDriveState
+      const state = this.getDriveState();
+      state.folderId = rootId;
+      state.subfolderIds = subfolderMap;
+      StorageService.saveGoogleDriveState(state);
+    } catch (e) {
+      console.warn('verifyOrCreateAllDriveFolders error:', e);
+    }
+
+    return {
+      rootId,
+      rootName: 'Tasker_Media',
+      subfolders: subfolderMap,
+    };
+  }
+
+  /**
+   * Helper function that maps mime-types and extensions to their proper subfolder
+   * (Videos, Documents, Presentations, Spreadsheets, Programs, Images, Audio, Other),
+   * ensures the subfolder exists on Google Drive, and returns the exact target subfolder ID.
+   */
+  static async getOrTargetSubfolder(
+    accessToken: string,
+    file: File | { name: string; type?: string }
+  ): Promise<string> {
+    const category = this.categorizeFile(file.name, file.type);
+    const state = this.getDriveState();
+
+    if (
+      state.subfolderIds &&
+      state.subfolderIds[category] &&
+      !state.subfolderIds[category].includes('tasker-app-data') &&
+      /^[a-zA-Z0-9_-]{15,}$/.test(state.subfolderIds[category])
+    ) {
+      return state.subfolderIds[category];
+    }
+
+    // Verify or create all folders on demand
+    const structure = await this.verifyOrCreateAllDriveFolders(accessToken);
+    return structure.subfolders[category] || structure.rootId;
+  }
+
+  /**
+   * Ensures the visible `Tasker_Media` folder exists on Google Drive, creating it if needed.
    */
   static async ensureVisibleDriveFolder(): Promise<string | null> {
     const token = this.getActiveToken();
@@ -599,20 +834,22 @@ export class GoogleAuthService {
   }
 
   /**
-   * Opens the user's `Tasker App Data` folder in a new browser tab.
+   * Opens the user's `Tasker_Media` folder or subfolder in a new browser tab.
    * If not yet created or token is inactive, opens user's My Drive directly (https://drive.google.com/drive/u/0/my-drive)
    * so the user never sees a 404 error.
    */
-  static async openDriveFolderInNewTab(): Promise<void> {
+  static async openDriveFolderInNewTab(subfolderCategory?: MediaCategory): Promise<void> {
     const state = this.getDriveState();
-    let folderId = (state.folderId && !state.folderId.includes('tasker-app-data-vault') && /^[a-zA-Z0-9_-]{20,}$/.test(state.folderId))
+    let folderId = (subfolderCategory && state.subfolderIds?.[subfolderCategory])
+      ? state.subfolderIds[subfolderCategory]
+      : (state.folderId && !state.folderId.includes('tasker-app-data-vault') && /^[a-zA-Z0-9_-]{15,}$/.test(state.folderId))
       ? state.folderId
       : null;
 
     if (!folderId && state.accessToken) {
       try {
         const createdId = await this.initDriveFolder(state.accessToken);
-        if (createdId && !createdId.includes('tasker-app-data-vault') && /^[a-zA-Z0-9_-]{20,}$/.test(createdId)) {
+        if (createdId && !createdId.includes('tasker-app-data-vault') && /^[a-zA-Z0-9_-]{15,}$/.test(createdId)) {
           folderId = createdId;
         }
       } catch {
@@ -629,7 +866,9 @@ export class GoogleAuthService {
 
   /**
    * Resumable Direct Upload to Google Drive with real-time Progress Bar tracking.
+   * Routes the file directly into its specific typed subfolder (Videos, Documents, Images, etc.).
    * Supports files of any size (even 2GB+ movies) with zero browser memory crashes.
+   * ZERO FAKING: If upload fails, reports error and throws; never returns a fake driveId.
    */
   static async uploadMediaFileResumable(
     file: File,
@@ -647,17 +886,14 @@ export class GoogleAuthService {
       return null;
     }
 
-    // Ensure folder exists
-    let folderId = await this.ensureVisibleDriveFolder();
-    if (!folderId || folderId === 'tasker-app-data-vault') {
-      folderId = await this.initDriveFolder(token);
-    }
+    // Route directly into the category-specific subfolder (Videos, Documents, etc.)
+    const targetFolderId = await this.getOrTargetSubfolder(token, file);
 
     const metadata = {
       name: file.name,
-      parents: (folderId && folderId !== 'tasker-app-data-vault') ? [folderId] : ['root'],
+      parents: [targetFolderId],
       mimeType: file.type || 'application/octet-stream',
-      description: 'Tasker media upload',
+      description: `Tasker media upload (${this.categorizeFile(file.name, file.type)})`,
     };
 
     onProgress?.({
@@ -807,8 +1043,9 @@ export class GoogleAuthService {
   }
 
   /**
-   * Uploads attached images, videos, and documents directly to user's visible `Tasker App Data` folder in Google Drive.
+   * Uploads attached images, videos, and documents directly to user's typed subfolder in Google Drive.
    * If file is large (>2MB) or a File object, automatically routes to resumable upload.
+   * ZERO FAKING: Only returns real Google Drive file IDs.
    */
   static async uploadMediaFile(
     fileBlob: Blob | File,
@@ -824,12 +1061,13 @@ export class GoogleAuthService {
     }
 
     try {
-      const folderId = await this.ensureVisibleDriveFolder();
+      const targetFolderId = await this.getOrTargetSubfolder(token, { name: filename, type: mimeType });
 
       const metadata = {
         name: filename,
-        parents: (folderId && folderId !== 'tasker-app-data-vault') ? [folderId] : ['root'],
+        parents: [targetFolderId],
         mimeType: mimeType || 'application/octet-stream',
+        description: `Tasker media upload (${this.categorizeFile(filename, mimeType)})`,
       };
 
       const form = new FormData();
@@ -865,6 +1103,17 @@ export class GoogleAuthService {
       console.warn('Google Drive media file upload error:', err);
     }
     return null;
+  }
+
+  /**
+   * Immediate 1-click token re-prompt if Google Drive access token is missing or expired.
+   */
+  static async repromptDriveToken(): Promise<string> {
+    const account = await this.requestRealGoogleOAuth();
+    if (account.accessToken) {
+      return account.accessToken;
+    }
+    throw new Error('Google Drive access token not granted.');
   }
 
   /**
