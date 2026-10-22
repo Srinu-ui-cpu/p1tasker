@@ -35,8 +35,11 @@ export const AttachGoogleModal: React.FC<AttachGoogleModalProps> = ({
     setErrorMessage(null);
 
     try {
-      await FirebaseAuthService.signInWithGoogle();
-      await GoogleAuthService.triggerDriveSync();
+      const account = await GoogleAuthService.requestRealGoogleOAuth();
+      if (account.accessToken) {
+        await GoogleAuthService.initDriveFolder(account.accessToken).catch(() => {});
+      }
+      await GoogleAuthService.triggerDriveSync().catch(() => {});
       setIsConnecting(false);
       onConnected();
       onClose();

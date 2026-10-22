@@ -2,20 +2,26 @@ import React, { useState, useRef } from 'react';
 import { 
   FileText, 
   Image as ImageIcon, 
-  ExternalLink, 
   Maximize2, 
   Trash2, 
   Plus, 
   Cloud, 
-  Edit3, 
   Check, 
-  Download,
-  FileUp,
-  Sparkles,
-  Paperclip
+  FileUp, 
+  Sparkles, 
+  Paperclip,
+  Bold,
+  Italic,
+  Underline,
+  List,
+  ListOrdered,
+  Search,
+  Replace,
+  X,
+  Eye,
+  Eraser
 } from 'lucide-react';
 import { FileAttachment } from '../types';
-import { GoogleAuthService } from '../services/googleAuthService';
 
 export interface DocumentBlock {
   type: 'text' | 'attachment';
@@ -85,40 +91,66 @@ export const WordDocumentCanvas: React.FC<WordDocumentCanvasProps> = ({
   onInsertMedia,
   date,
 }) => {
-  const [editingBlockIndex, setEditingBlockIndex] = useState<number | null>(null);
-  const [editBlockText, setEditBlockText] = useState('');
-  const [insertTargetIndex, setInsertTargetIndex] = useState<number | null>(null);
   const inlineFileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Find & Replace State (Word Document Feature from TraceYourself)
+  const [showFindReplace, setShowFindReplace] = useState(false);
+  const [findText, setFindText] = useState('');
+  const [replaceText, setReplaceText] = useState('');
+  const [replaceCountMessage, setReplaceCountMessage] = useState<string | null>(null);
+
+  // View Mode: 'editor' (Fluid Word Document Writing) or 'preview' (WYSIWYG Formatted Print View)
+  const [viewMode, setViewMode] = useState<'editor' | 'preview'>('editor');
 
   const blocks = parseDocumentContent(content, attachments);
 
-  // Attachments not yet embedded inline into the text
-  const referencedAttachmentIds = new Set(
-    blocks.filter((b) => b.type === 'attachment' && b.id).map((b) => b.id)
-  );
-  const unplacedAttachments = attachments.filter(
-    (a) => !referencedAttachmentIds.has(a.id) && !referencedAttachmentIds.has(a.hash)
-  );
+  // Format Selection Helper (Applies formatting around selection or at cursor)
+  const applyFormatting = (prefix: string, suffix: string = prefix, defaultPlaceholder: string = 'text') => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
 
-  const handleStartEditBlock = (index: number, currentText: string) => {
-    setEditingBlockIndex(index);
-    setEditBlockText(currentText);
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = content.substring(start, end);
+
+    const replacement = selected ? `${prefix}${selected}${suffix}` : `${prefix}${defaultPlaceholder}${suffix}`;
+    const newContent = content.substring(0, start) + replacement + content.substring(end);
+    onContentChange(newContent);
+
+    // Re-focus and set cursor inside formatted region
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = selected ? end + prefix.length + suffix.length : start + prefix.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos + (selected ? 0 : defaultPlaceholder.length));
+    }, 50);
   };
 
-  const handleSaveBlockEdit = (index: number) => {
-    const newBlocks = [...blocks];
-    newBlocks[index] = { ...newBlocks[index], content: editBlockText };
+  // Find & Replace Action
+  const handleReplaceAll = () => {
+    if (!findText) return;
+    const occurrences = content.split(findText).length - 1;
+    if (occurrences === 0) {
+      setReplaceCountMessage('No matches found.');
+      setTimeout(() => setReplaceCountMessage(null), 3000);
+      return;
+    }
+    const newContent = content.split(findText).join(replaceText);
+    onContentChange(newContent);
+    setReplaceCountMessage(`Replaced ${occurrences} match${occurrences === 1 ? '' : 'es'}.`);
+    setTimeout(() => setReplaceCountMessage(null), 3000);
+  };
 
-    // Reconstruct full content
-    const updatedContent = newBlocks
-      .map((b) => {
-        if (b.type === 'text') return b.content || '';
-        return b.originalTag || `{{attachment:${b.id}}}`;
-      })
-      .join('');
+  // Inline media selected
+  const handleInlineFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    onContentChange(updatedContent);
-    setEditingBlockIndex(null);
+    try {
+      await onInsertMedia(file);
+    } finally {
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleRemoveAttachmentFromText = (attachmentId?: string) => {
@@ -128,29 +160,13 @@ export const WordDocumentCanvas: React.FC<WordDocumentCanvasProps> = ({
     const cleaned = content
       .split(tag1).join('')
       .split(tag2).join('')
-      .replace(/\n{3,}/g, '\n\n');
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
     onContentChange(cleaned);
   };
 
-  const handleInsertUnplacedAttachment = (attachment: FileAttachment) => {
-    const marker = `\n\n{{attachment:${attachment.id}}}\n\n`;
-    onContentChange(`${content.trimEnd()}${marker}`);
-  };
-
-  const handleInlineFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    try {
-      await onInsertMedia(file, insertTargetIndex !== null ? insertTargetIndex : undefined);
-    } finally {
-      if (e.target) e.target.value = '';
-      setInsertTargetIndex(null);
-    }
-  };
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <input
         ref={inlineFileInputRef}
         type="file"
@@ -158,341 +174,357 @@ export const WordDocumentCanvas: React.FC<WordDocumentCanvasProps> = ({
         onChange={handleInlineFileSelected}
       />
 
-      {/* Word Document Canvas Page */}
-      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl p-6 sm:p-10 space-y-6 max-w-4xl mx-auto relative overflow-hidden">
+      {/* =========================================================================
+          WORD DOCUMENT PAPER CANVAS (.editor-paper inspired by TraceYourself)
+         ========================================================================= */}
+      <div className="bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden max-w-4xl mx-auto transition-all">
         
-        {/* Document Header Ribbon */}
-        <div className="pb-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-indigo-950 text-indigo-400 border border-indigo-800/80 flex items-center justify-center font-bold text-xs shadow-sm">
-              W
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-white tracking-wide">
-                  Word Document Flow
-                </span>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">
-                  Standard Sheet
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400">
-                Write a paragraph, embed an image or file, and continue writing paragraphs below.
-              </p>
-            </div>
-          </div>
+        {/* Document Canvas Ribbon Toolbar */}
+        <div className="p-3 sm:px-6 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2 text-xs">
+          
+          {/* Text Styling Tools */}
+          <div className="flex items-center gap-1 flex-wrap">
+            <button
+              type="button"
+              onClick={() => applyFormatting('**', '**', 'bold text')}
+              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition font-bold"
+              title="Bold Text (Ctrl+B)"
+            >
+              <Bold className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => applyFormatting('*', '*', 'italic text')}
+              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition italic"
+              title="Italicize Text (Ctrl+I)"
+            >
+              <Italic className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => applyFormatting('<u>', '</u>', 'underlined text')}
+              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition underline"
+              title="Underline Text (Ctrl+U)"
+            >
+              <Underline className="w-3.5 h-3.5" />
+            </button>
+            
+            <div className="w-[1px] h-4 bg-slate-800 mx-1" />
 
-          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => applyFormatting('\n- ', '', 'List item')}
+              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition"
+              title="Bulleted List"
+            >
+              <List className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => applyFormatting('\n1. ', '', 'Numbered item')}
+              className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-300 hover:text-white transition"
+              title="Numbered List"
+            >
+              <ListOrdered className="w-3.5 h-3.5" />
+            </button>
+
+            <div className="w-[1px] h-4 bg-slate-800 mx-1" />
+
+            <button
+              type="button"
+              onClick={() => setShowFindReplace(!showFindReplace)}
+              className={`p-1.5 rounded-lg transition flex items-center gap-1 ${
+                showFindReplace 
+                  ? 'bg-indigo-600 text-white font-bold' 
+                  : 'hover:bg-slate-800 text-slate-300 hover:text-white'
+              }`}
+              title="Find and Replace in Document"
+            >
+              <Search className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline text-[11px]">Replace</span>
+            </button>
+
             <button
               type="button"
               onClick={() => inlineFileInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs transition shadow-sm"
-              title="Insert Image or Document file inline at end of document"
+              className="p-1.5 px-2.5 rounded-lg bg-indigo-950 text-indigo-300 hover:bg-indigo-900 border border-indigo-800/80 transition flex items-center gap-1 font-semibold"
+              title="Insert Image / Media inline into Document"
             >
               <FileUp className="w-3.5 h-3.5" />
-              <span>+ Insert Media / File</span>
+              <span className="text-[11px]">+ Insert Media</span>
+            </button>
+          </div>
+
+          {/* View Mode Toggle: Document Editor vs WYSIWYG Print Preview */}
+          <div className="flex items-center bg-slate-900 p-0.5 rounded-xl border border-slate-800">
+            <button
+              type="button"
+              onClick={() => setViewMode('editor')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition ${
+                viewMode === 'editor'
+                  ? 'bg-indigo-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              Document Editor
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('preview')}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 ${
+                viewMode === 'preview'
+                  ? 'bg-indigo-600 text-white shadow'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <Eye className="w-3 h-3" />
+              <span>Preview</span>
             </button>
           </div>
         </div>
 
-        {/* Document Body Flow */}
-        <div className="space-y-5 min-h-[220px]">
-          {blocks.length === 0 ? (
-            <div className="py-2">
+        {/* Find & Replace Bar (Expandable, from TraceYourself) */}
+        {showFindReplace && (
+          <div className="p-3 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2 animate-in fade-in">
+            <div className="flex items-center gap-2 flex-1 min-w-[280px]">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="Find text..."
+                  value={findText}
+                  onChange={(e) => setFindText(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="Replace with..."
+                  value={replaceText}
+                  onChange={(e) => setReplaceText(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={handleReplaceAll}
+                disabled={!findText}
+                className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs disabled:opacity-40 transition shrink-0"
+              >
+                Replace All
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {replaceCountMessage && (
+                <span className="text-xs text-indigo-300 font-medium">{replaceCountMessage}</span>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowFindReplace(false)}
+                className="p-1 hover:bg-slate-800 text-slate-400 hover:text-white rounded"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* =========================================================================
+            MAIN DOCUMENT CANVAS (WORD DOCUMENT SHEET)
+           ========================================================================= */}
+        <div className="p-6 sm:p-10 min-h-[420px] relative">
+          {viewMode === 'editor' ? (
+            /* Fluid Continuous Word Document Editor */
+            <div className="space-y-4">
               <textarea
+                ref={textareaRef}
                 value={content}
                 onChange={(e) => onContentChange(e.target.value)}
-                placeholder="Start typing your daily reflections, meetings, or thoughts here... (Tip: Click '+ Attach File' above to insert images and documents inline)"
-                rows={12}
-                className="w-full bg-transparent text-slate-100 text-sm sm:text-base leading-relaxed focus:outline-none resize-y font-sans placeholder-slate-500"
+                placeholder="Write your thoughts here... Type naturally like a Word document. Use + Attach File above or + Insert Media to embed photos, videos, and documents anywhere."
+                rows={16}
+                className="w-full bg-transparent text-slate-100 text-sm sm:text-base leading-relaxed focus:outline-none resize-y font-sans placeholder-slate-500 selection:bg-indigo-500 selection:text-white"
                 autoFocus
               />
-            </div>
-          ) : (
-            blocks.map((block, index) => {
-              if (block.type === 'text') {
-                const isEditing = editingBlockIndex === index;
-                return (
-                  <div key={`text-${index}`} className="group relative rounded-xl transition">
-                    {isEditing ? (
-                      <div className="space-y-2 p-3 bg-slate-950/80 rounded-2xl border border-indigo-700 shadow-inner">
-                        <textarea
-                          value={editBlockText}
-                          onChange={(e) => setEditBlockText(e.target.value)}
-                          rows={Math.max(3, editBlockText.split('\n').length + 1)}
-                          className="w-full bg-transparent text-slate-100 text-sm leading-relaxed focus:outline-none resize-y font-sans"
-                          autoFocus
-                        />
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setEditingBlockIndex(null)}
-                            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveBlockEdit(index)}
-                            className="px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold flex items-center gap-1"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                            <span>Save Paragraph</span>
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div 
-                        onClick={() => handleStartEditBlock(index, block.content || '')}
-                        className="cursor-text p-2 -m-2 rounded-xl hover:bg-slate-800/40 transition relative"
-                        title="Click to edit this paragraph"
-                      >
-                        <p className="text-slate-100 text-sm leading-relaxed whitespace-pre-wrap font-sans select-text">
-                          {block.content}
-                        </p>
-                        <span className="opacity-0 group-hover:opacity-100 absolute top-1 right-1 text-[10px] font-semibold text-indigo-400 bg-slate-950/80 px-2 py-0.5 rounded-md border border-slate-700 flex items-center gap-1 transition pointer-events-none">
-                          <Edit3 className="w-3 h-3" /> Click to edit
-                        </span>
-                      </div>
-                    )}
 
-                    {/* Subtle divider between blocks with Quick Insert */}
-                    <div className="pt-2 flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-200">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setInsertTargetIndex(index);
-                          inlineFileInputRef.current?.click();
-                        }}
-                        className="text-[11px] font-semibold text-slate-400 hover:text-indigo-300 bg-slate-950/90 border border-slate-700/80 hover:border-indigo-600 px-3 py-1 rounded-full shadow-md flex items-center gap-1.5 transition"
-                      >
-                        <Plus className="w-3 h-3 text-indigo-400" />
-                        <span>Insert Image / File below this paragraph</span>
-                      </button>
-                    </div>
+              {/* Inline Media Tray: Display compact chips of attachments referenced in document */}
+              {attachments.length > 0 && (
+                <div className="pt-6 border-t border-slate-800/80 space-y-2.5">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span className="font-semibold flex items-center gap-1.5 text-slate-300">
+                      <Paperclip className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>Embedded Media & Attachments ({attachments.length})</span>
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-mono">
+                      Click any item to view in popup lightbox
+                    </span>
                   </div>
-                );
-              }
 
-              // Attachment block
-              const att = block.attachment;
-              const isImage = att?.type.startsWith('image/');
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
+                    {attachments.map((att) => {
+                      const isImage = att.type.startsWith('image/');
+                      const isVideo = att.type.startsWith('video/');
 
-              return (
-                <div 
-                  key={`att-${block.id}-${index}`} 
-                  className="my-3 max-w-sm rounded-2xl border border-slate-700/80 bg-slate-950/80 shadow-md overflow-hidden group hover:border-indigo-500/80 transition"
-                >
-                  {att ? (
-                    isImage && att.dataUrl ? (
-                      /* Compact Inline Image Presentation */
-                      <div className="relative">
-                        <div 
-                          onClick={() => onOpenViewer(att)}
-                          className="w-full h-40 sm:h-48 bg-slate-950 flex items-center justify-center overflow-hidden cursor-pointer relative group/img transition"
-                          title="Click to view/read in popup modal"
+                      return (
+                        <div
+                          key={att.id}
+                          className="p-2.5 bg-slate-950/70 border border-slate-800 hover:border-indigo-600/80 rounded-2xl flex items-center justify-between gap-2 transition group"
                         >
-                          <img 
-                            src={att.dataUrl} 
-                            alt={att.name} 
-                            className="w-full h-full object-cover transition-transform duration-200 group-hover/img:scale-105" 
-                          />
-                          <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition gap-1.5 text-xs text-white font-semibold backdrop-blur-[2px]">
-                            <Maximize2 className="w-4 h-4 text-indigo-400" />
-                            <span>Click to View in Popup</span>
-                          </div>
-                        </div>
-
-                        {/* Compact Image Caption & Actions */}
-                        <div className="p-2.5 bg-slate-900 border-t border-slate-800 flex items-center justify-between gap-2">
-                          <div 
+                          <div
                             onClick={() => onOpenViewer(att)}
-                            className="flex items-center gap-1.5 cursor-pointer min-w-0"
-                            title={att.name}
+                            className="flex items-center gap-2 cursor-pointer min-w-0 flex-1"
+                            title={`Click to view ${att.name}`}
                           >
-                            <ImageIcon className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
-                            <span className="text-xs font-semibold text-slate-200 truncate max-w-[150px]">
-                              {att.name}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              ({(att.size / 1024).toFixed(0)}KB)
-                            </span>
+                            {isImage && att.dataUrl ? (
+                              <img
+                                src={att.dataUrl}
+                                alt={att.name}
+                                className="w-9 h-9 rounded-lg object-cover shrink-0 border border-slate-800"
+                              />
+                            ) : (
+                              <div className="w-9 h-9 rounded-lg bg-indigo-950 text-indigo-400 border border-indigo-800/80 flex items-center justify-center shrink-0">
+                                {isImage ? <ImageIcon className="w-4 h-4" /> : isVideo ? <Maximize2 className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                              </div>
+                            )}
+
+                            <div className="min-w-0">
+                              <span className="text-xs font-semibold text-slate-200 truncate block max-w-[140px]">
+                                {att.name}
+                              </span>
+                              <div className="flex items-center gap-1 text-[10px] text-slate-400 font-mono">
+                                <span>{(att.size / 1024).toFixed(0)} KB</span>
+                                <span>&bull;</span>
+                                <span className="text-emerald-400 font-semibold">Drive</span>
+                              </div>
+                            </div>
                           </div>
 
                           <div className="flex items-center gap-1">
                             <button
                               type="button"
                               onClick={() => onOpenViewer(att)}
-                              className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] flex items-center gap-1 transition shadow-sm"
-                              title="Click to open popup preview & View in Google Drive"
+                              className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] transition shadow-sm"
+                              title="Click to view/read in popup modal"
                             >
-                              <span>View</span>
-                              <Maximize2 className="w-3 h-3" />
+                              View
                             </button>
-
                             <button
                               type="button"
                               onClick={() => onDeleteAttachment(att)}
-                              className="p-1 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 transition"
-                              title="Permanently delete this file from diary and Google Drive"
+                              className="p-1 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition"
+                              title="Delete from diary and Google Drive"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
                         </div>
-                      </div>
-                    ) : (
-                      /* Inline File / Document Presentation */
-                      <div className="p-3 bg-slate-900 flex items-center justify-between gap-2.5">
-                        <div 
-                          onClick={() => onOpenViewer(att)}
-                          className="flex items-center gap-2 cursor-pointer min-w-0"
-                          title="Click to view file in popup modal"
-                        >
-                          <div className="p-2 rounded-xl bg-indigo-950 text-indigo-400 border border-indigo-800/80 shrink-0">
-                            <FileText className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <span className="text-xs font-bold text-white truncate block max-w-[170px]" title={att.name}>
-                              {att.name}
-                            </span>
-                            <div className="flex items-center gap-1.5 text-[10px] text-slate-400 font-mono mt-0.5">
-                              <span>{(att.size / 1024).toFixed(0)}KB</span>
-                              <span>&bull;</span>
-                              <span className="text-emerald-400 font-semibold flex items-center gap-0.5">
-                                <Cloud className="w-2.5 h-2.5" /> Drive
-                              </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* WYSIWYG Formatted Print/Reading View */
+            <div className="space-y-4">
+              {blocks.length === 0 ? (
+                <p className="text-slate-500 italic text-sm">Document is empty.</p>
+              ) : (
+                blocks.map((block, index) => {
+                  if (block.type === 'text') {
+                    return (
+                      <p key={`block-${index}`} className="text-slate-100 text-sm sm:text-base leading-relaxed whitespace-pre-wrap font-sans">
+                        {block.content}
+                      </p>
+                    );
+                  }
+
+                  const att = block.attachment;
+                  const isImage = att?.type.startsWith('image/');
+
+                  return (
+                    <div key={`block-${index}`} className="my-4 max-w-sm rounded-2xl border border-slate-700/80 bg-slate-950/80 overflow-hidden shadow-md">
+                      {att ? (
+                        isImage && att.dataUrl ? (
+                          <div>
+                            <div 
+                              onClick={() => onOpenViewer(att)}
+                              className="w-full h-40 sm:h-48 bg-slate-950 flex items-center justify-center overflow-hidden cursor-pointer group relative"
+                            >
+                              <img src={att.dataUrl} alt={att.name} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                              <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition gap-1.5 text-xs text-white font-semibold">
+                                <Maximize2 className="w-4 h-4 text-indigo-400" />
+                                <span>Click to View in Popup</span>
+                              </div>
+                            </div>
+                            <div className="p-2.5 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-xs">
+                              <span className="font-semibold text-slate-200 truncate max-w-[200px]">{att.name}</span>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenViewer(att)}
+                                  className="px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px]"
+                                >
+                                  View
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => onDeleteAttachment(att)}
+                                  className="p-1 text-slate-400 hover:text-rose-400"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </div>
                           </div>
-                        </div>
-
-                        <div className="flex items-center gap-1">
+                        ) : (
+                          <div className="p-3 bg-slate-900 flex items-center justify-between gap-3">
+                            <div onClick={() => onOpenViewer(att)} className="flex items-center gap-2 cursor-pointer min-w-0">
+                              <div className="p-2 rounded-xl bg-indigo-950 text-indigo-400 border border-indigo-800/80 shrink-0">
+                                <FileText className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <span className="text-xs font-bold text-white truncate block max-w-[180px]">{att.name}</span>
+                                <span className="text-[10px] text-slate-400 font-mono">{(att.size / 1024).toFixed(0)} KB &bull; Google Drive</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => onOpenViewer(att)}
+                                className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px]"
+                              >
+                                Read
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onDeleteAttachment(att)}
+                                className="p-1 text-slate-400 hover:text-rose-400"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      ) : (
+                        <div className="p-2.5 bg-slate-950 text-xs text-slate-500 flex items-center justify-between">
+                          <span>Attachment [#{block.id}]</span>
                           <button
                             type="button"
-                            onClick={() => onOpenViewer(att)}
-                            className="px-2 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[11px] flex items-center gap-1 shadow-sm transition"
-                            title="Click to view/read in popup modal"
+                            onClick={() => handleRemoveAttachmentFromText(block.id)}
+                            className="text-rose-400 hover:underline text-[11px]"
                           >
-                            <span>Read</span>
-                            <Maximize2 className="w-3 h-3" />
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => onDeleteAttachment(att)}
-                            className="p-1 rounded-lg bg-slate-800 hover:bg-rose-900/60 text-slate-400 hover:text-rose-300 transition"
-                            title="Permanently delete this file from diary and Google Drive"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            Remove
                           </button>
                         </div>
-                      </div>
-                    )
-                  ) : (
-                    /* Missing / Unresolved attachment */
-                    <div className="p-3 bg-slate-950 flex items-center justify-between text-xs text-slate-400">
-                      <span className="font-mono text-slate-500">
-                        Attachment reference [#{block.id}]
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveAttachmentFromText(block.id)}
-                        className="text-rose-400 hover:underline text-[11px]"
-                      >
-                        Remove reference
-                      </button>
+                      )}
                     </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-
-          {/* Direct Continuation Typing Area */}
-          {blocks.length > 0 && (
-            <div className="pt-4 border-t border-slate-800/60 mt-4">
-              <textarea
-                placeholder="Continue writing below... (Press Enter to append paragraph)"
-                rows={3}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    const target = e.target as HTMLTextAreaElement;
-                    if (target.value.trim()) {
-                      e.preventDefault();
-                      const separator = content.trim() ? '\n\n' : '';
-                      onContentChange(`${content}${separator}${target.value.trim()}`);
-                      target.value = '';
-                    }
-                  }
-                }}
-                className="w-full bg-slate-950/60 hover:bg-slate-950 focus:bg-slate-950 rounded-2xl p-3 border border-slate-800 focus:border-indigo-600 text-slate-100 text-sm leading-relaxed focus:outline-none resize-y font-sans placeholder-slate-500 transition shadow-inner"
-              />
-              <span className="text-[10px] text-slate-500 mt-1 block px-1">
-                Tip: Press Enter to append paragraph, or Shift+Enter for new line.
-              </span>
+                  );
+                })
+              )}
             </div>
           )}
         </div>
-
-        {/* Unplaced Attachments Tray */}
-        {unplacedAttachments.length > 0 && (
-          <div className="mt-8 pt-5 border-t border-slate-800/80 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Paperclip className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Media Attached to this Date (Not yet placed inline)</span>
-              </span>
-              <span className="text-[10px] text-slate-500 font-mono">
-                Click "+ Place in Document" to embed between paragraphs
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5">
-              {unplacedAttachments.map((file) => (
-                <div
-                  key={file.id}
-                  className="p-2.5 rounded-xl bg-slate-950/80 border border-slate-800 hover:border-slate-700 flex items-center justify-between gap-2 transition"
-                >
-                  <div
-                    onClick={() => onOpenViewer(file)}
-                    className="flex items-center gap-2 cursor-pointer min-w-0"
-                    title="Click to preview file and open in Drive"
-                  >
-                    {file.type.startsWith('image/') ? (
-                      <ImageIcon className="w-4 h-4 text-indigo-400 shrink-0" />
-                    ) : (
-                      <FileText className="w-4 h-4 text-slate-400 shrink-0" />
-                    )}
-                    <span className="text-xs text-slate-200 font-medium truncate" title={file.name}>
-                      {file.name}
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => handleInsertUnplacedAttachment(file)}
-                      className="px-2 py-1 rounded-lg bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-800/80 text-[10px] font-bold transition flex items-center gap-1"
-                      title="Insert this media into the document flow"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>Place</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => onOpenViewer(file)}
-                      className="p-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px]"
-                      title="View in Drive popup"
-                    >
-                      <Cloud className="w-3 h-3 text-indigo-400" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
       </div>
     </div>

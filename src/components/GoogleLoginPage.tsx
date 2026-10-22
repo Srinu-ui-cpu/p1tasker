@@ -2,17 +2,16 @@ import React, { useState } from 'react';
 import { 
   CheckSquare, 
   ArrowRight, 
-  AlertCircle,
-  Mail, 
-  User, 
+  AlertCircle, 
   ShieldCheck, 
-  Loader2,
-  ArrowLeft,
-  XCircle,
-  Sparkles
+  Loader2, 
+  ArrowLeft, 
+  RotateCcw,
+  Cloud,
+  CheckCircle2,
+  FolderOpen
 } from 'lucide-react';
 import { GoogleAuthService } from '../services/googleAuthService';
-import { FirebaseAuthService } from '../services/firebaseAuthService';
 
 interface GoogleLoginPageProps {
   onLoginSuccess: () => void;
@@ -20,77 +19,61 @@ interface GoogleLoginPageProps {
 }
 
 export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess, onBack }) => {
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
-  const [emailInput, setEmailInput] = useState('');
-  const [nameInput, setNameInput] = useState('');
-  const [rememberMe, setRememberMe] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isGooglePopupActive, setIsGooglePopupActive] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successStatus, setSuccessStatus] = useState<string | null>(null);
+  const [showConfig, setShowConfig] = useState(false);
+  const [customClientId, setCustomClientId] = useState(() => GoogleAuthService.getClientId());
 
-  // Cancel any ongoing popup wait
-  const handleCancelPopup = () => {
-    setIsSubmitting(false);
-    setIsGooglePopupActive(false);
-    setErrorMessage('Google Sign-In was cancelled. You can enter your Google email below for instant access.');
-  };
-
-  // --- Official Firebase Google Sign-In Flow ---
+  // Pure Google Identity Services OAuth (Identical to TraceYourself engine)
   const handleGoogleSignIn = async () => {
     setIsSubmitting(true);
-    setIsGooglePopupActive(true);
     setErrorMessage(null);
+    setSuccessStatus('Connecting to Google Identity Services...');
 
     try {
-      if (rememberMe) {
-        localStorage.setItem('tasker_remember_me', 'true');
-      } else {
-        localStorage.removeItem('tasker_remember_me');
-      }
+      setSuccessStatus('Requesting Google Account & Google Drive permissions...');
+      const account = await GoogleAuthService.requestRealGoogleOAuth(customClientId.trim() || undefined);
 
-      await FirebaseAuthService.signInWithGoogle();
+      setSuccessStatus(`Authenticated as ${account.email}! Initializing Google Drive Media folder...`);
       
-      setIsSubmitting(false);
-      setIsGooglePopupActive(false);
-      onLoginSuccess();
-    } catch (err: unknown) {
-      const error = err as Error;
-      setIsSubmitting(false);
-      setIsGooglePopupActive(false);
-      console.error('Sign-in error:', error);
-      setErrorMessage(error.message || 'Google Sign-In was cancelled or timed out. Please try direct email entry below.');
-    }
-  };
-
-  // --- Direct Email Vault Flow (Instant Access) ---
-  const handleEmailSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanEmail = emailInput.trim().toLowerCase();
-
-    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      setErrorMessage('Please enter a valid Google Account or Gmail address.');
-      return;
-    }
-
-    setIsSubmitting(true);
-    setErrorMessage(null);
-
-    try {
-      if (rememberMe) {
-        localStorage.setItem('tasker_remember_me', 'true');
+      // Proactively create/verify Tasker_Media folder in My Drive
+      if (account.accessToken) {
+        try {
+          const folderId = await GoogleAuthService.initDriveFolder(account.accessToken);
+          console.log('Tasker Google Drive media folder ready:', folderId);
+        } catch (folderErr) {
+          console.warn('Initial drive folder notification:', folderErr);
+        }
       }
 
-      GoogleAuthService.signInWithRealEmail(cleanEmail, nameInput.trim() || undefined);
-      GoogleAuthService.setAuthenticated(true);
-
+      setSuccessStatus('Ready! Opening your Tasker Workspace...');
       setTimeout(() => {
         setIsSubmitting(false);
         onLoginSuccess();
-      }, 300);
+      }, 500);
     } catch (err: unknown) {
       const error = err as Error;
       setIsSubmitting(false);
-      setErrorMessage(error.message || 'Could not open account vault.');
+      setSuccessStatus(null);
+      console.error('Sign-in error:', error);
+      setErrorMessage(
+        error.message || 'Google Sign-In was cancelled or failed. Please ensure popups are allowed.'
+      );
+    }
+  };
+
+  const handleStartFresh = () => {
+    if (window.confirm('Clear all local session data and restart fresh?')) {
+      GoogleAuthService.resetAllAuthAndStartFresh();
+      window.location.reload();
+    }
+  };
+
+  const handleSaveClientId = () => {
+    if (customClientId.trim()) {
+      GoogleAuthService.saveClientId(customClientId.trim());
+      alert('Google Client ID saved!');
     }
   };
 
@@ -128,59 +111,46 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
               </span>
             </h1>
             <p className="text-xs text-slate-400 mt-1">
-              Autonomous Productivity & Personal Google Drive Cloud Vault
+              Personal Productivity & Google Drive Media Cloud Vault
             </p>
           </div>
         </div>
 
-        {/* Auth Mode Toggle Pill (Sign In / Sign Up) */}
-        <div className="p-1 bg-slate-950/80 border border-slate-800 rounded-2xl flex items-center">
-          <button
-            type="button"
-            onClick={() => setAuthMode('signin')}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition ${
-              authMode === 'signin'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Sign In
-          </button>
-          <button
-            type="button"
-            onClick={() => setAuthMode('signup')}
-            className={`flex-1 py-2 text-xs font-bold rounded-xl transition ${
-              authMode === 'signup'
-                ? 'bg-indigo-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Create Account
-          </button>
-        </div>
+        {/* Success Status Banner */}
+        {successStatus && (
+          <div className="p-3 bg-emerald-950/70 border border-emerald-800 text-emerald-200 rounded-2xl text-xs flex items-center gap-2">
+            <Loader2 className="w-4 h-4 text-emerald-400 animate-spin shrink-0" />
+            <span className="leading-relaxed">{successStatus}</span>
+          </div>
+        )}
 
         {/* Error Alert Display */}
         {errorMessage && (
-          <div className="p-3 bg-rose-950/60 border border-rose-800 text-rose-200 rounded-2xl text-xs flex items-start gap-2 animate-shake">
+          <div className="p-3 bg-rose-950/70 border border-rose-800 text-rose-200 rounded-2xl text-xs flex items-start gap-2">
             <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
             <div className="flex-1">
               <span className="text-xs text-rose-300 block leading-relaxed">{errorMessage}</span>
+              {errorMessage.includes('origin_mismatch') && (
+                <span className="text-[11px] text-amber-300 block mt-1">
+                  Ensure <code>https://p1tasker.vercel.app</code> is in Google Cloud Console &gt; Credentials &gt; Authorized JavaScript Origins.
+                </span>
+              )}
             </div>
           </div>
         )}
 
-        {/* PRIMARY ACTION 1: GOOGLE ONE-CLICK SIGN IN */}
-        <div className="space-y-3">
+        {/* Primary Action: Official Google Sign-In with Real Google Drive Scopes */}
+        <div className="space-y-4">
           <button
             type="button"
             onClick={handleGoogleSignIn}
             disabled={isSubmitting}
             className="w-full py-3.5 px-4 bg-white hover:bg-slate-100 active:scale-[0.99] text-slate-900 font-bold text-sm sm:text-base rounded-2xl flex items-center justify-center gap-3 transition shadow-xl shadow-white/10 border border-slate-200 group relative overflow-hidden"
           >
-            {isGooglePopupActive ? (
+            {isSubmitting ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin text-indigo-600" />
-                <span>Connecting with Google...</span>
+                <span>Authorizing with Google...</span>
               </>
             ) : (
               <>
@@ -190,99 +160,66 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
                   <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
                   <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
                 </svg>
-                <span>
-                  {authMode === 'signin' ? 'Sign in with Google' : 'Sign up with Google'}
-                </span>
+                <span>Sign in with Google</span>
                 <ArrowRight className="w-4 h-4 ml-auto text-slate-400 group-hover:translate-x-1 group-hover:text-slate-900 transition" />
               </>
             )}
           </button>
 
-          {/* Cancel button if popup is taking time */}
-          {isGooglePopupActive && (
-            <button
-              type="button"
-              onClick={handleCancelPopup}
-              className="w-full py-1.5 text-xs text-rose-400 hover:text-rose-300 font-medium flex items-center justify-center gap-1 transition"
-            >
-              <XCircle className="w-3.5 h-3.5" />
-              <span>Cancel or taking too long? Click here</span>
-            </button>
-          )}
-
-          {/* Clean Drive Scope Notice */}
-          <div className="p-3 bg-slate-950/60 rounded-2xl border border-slate-800 text-[11px] text-slate-300 flex items-start gap-2">
-            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            <p className="leading-relaxed">
-              Google will sync your private <strong className="text-white">📁 Tasker App Data</strong> folder. Your personal files outside this folder are never accessed.
+          {/* Drive Permissions Explanation */}
+          <div className="p-3 bg-slate-950/70 rounded-2xl border border-slate-800 text-[11px] text-slate-300 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-indigo-400 font-semibold">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Real Google Drive Cloud Integration</span>
+            </div>
+            <p className="leading-relaxed text-slate-400">
+              When prompted, please allow Google Drive access. Tasker will automatically create a public <strong className="text-slate-200">Tasker_Media</strong> folder in your root My Drive for your photos, videos, and attachments.
             </p>
           </div>
         </div>
 
-        {/* DIVIDER */}
-        <div className="relative flex items-center justify-center">
-          <div className="border-t border-slate-800 w-full" />
-          <span className="bg-slate-900 px-3 text-[11px] uppercase tracking-wider text-slate-500 font-semibold absolute">
-            Or sign in directly with email
-          </span>
-        </div>
+        {/* Config & Reset Actions */}
+        <div className="pt-2 border-t border-slate-800 space-y-2">
+          <div className="flex items-center justify-between text-xs text-slate-400">
+            <button
+              type="button"
+              onClick={() => setShowConfig(!showConfig)}
+              className="hover:text-slate-200 underline text-[11px]"
+            >
+              {showConfig ? 'Hide Client ID Settings' : 'OAuth Client ID: ...' + customClientId.slice(-12)}
+            </button>
 
-        {/* PRIMARY ACTION 2: DIRECT GOOGLE EMAIL ENTRY (INSTANT ACCESS) */}
-        <form onSubmit={handleEmailSubmit} className="space-y-3">
-          <div className="space-y-1">
-            <label className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
-              <Mail className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Google Account / Gmail Address</span>
-            </label>
-            <input
-              type="email"
-              required
-              placeholder="e.g. smnsreddy01@gmail.com"
-              value={emailInput}
-              onChange={(e) => setEmailInput(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none transition font-mono"
-            />
+            <button
+              type="button"
+              onClick={handleStartFresh}
+              className="inline-flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 font-medium"
+              title="Clears all local storage and restarts cleanly"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Start Fresh</span>
+            </button>
           </div>
 
-          {authMode === 'signup' && (
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-400 flex items-center gap-1.5">
-                <User className="w-3.5 h-3.5 text-indigo-400" />
-                <span>Your Name (Optional)</span>
-              </label>
+          {showConfig && (
+            <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 space-y-2 text-xs">
+              <label className="text-[11px] text-slate-400 font-medium">Google Cloud OAuth 2.0 Web Client ID:</label>
               <input
                 type="text"
-                placeholder="e.g. Srinivas Reddy"
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none transition"
+                value={customClientId}
+                onChange={(e) => setCustomClientId(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-100 font-mono"
               />
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleSaveClientId}
+                  className="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold"
+                >
+                  Save ID
+                </button>
+              </div>
             </div>
           )}
-
-          <button
-            type="submit"
-            disabled={isSubmitting || !emailInput.trim()}
-            className="w-full py-3 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/25 flex items-center justify-center gap-2"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Enter Personal Cloud Vault (Instant)</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </form>
-
-        {/* Remember Me Checkbox */}
-        <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-700 bg-slate-950 text-indigo-600 focus:ring-0 focus:ring-offset-0 cursor-pointer"
-            />
-            <span>Remember session on this device</span>
-          </label>
-          <span className="text-[10px] text-emerald-400 font-medium">Auto-Sync Enabled</span>
         </div>
 
         {/* Footer Links */}
@@ -292,7 +229,7 @@ export const GoogleLoginPage: React.FC<GoogleLoginPageProps> = ({ onLoginSuccess
             <span>•</span>
             <a href="/terms" target="_blank" rel="noreferrer" className="hover:text-slate-300 underline">Terms of Service</a>
           </div>
-          <span className="text-slate-400 font-mono">v2.2 Production</span>
+          <span className="text-slate-400 font-mono">v2.3 Drive Engine</span>
         </div>
 
       </div>

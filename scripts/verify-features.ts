@@ -513,32 +513,23 @@ async function main() {
   await runTest('GoogleAuthService', 'Configured Google Client ID verification', () => {
     const clientId = GoogleAuthService.getClientId();
     assert(
+      clientId === '634475536724-0e7apq2ee7p3udvuktuldtip5g54t2ru.apps.googleusercontent.com' ||
       clientId.includes('.apps.googleusercontent.com'),
       'Must match verified Google OAuth 2.0 Client ID'
     );
   });
 
-  await runTest('GoogleAuthService', 'Auto-healing of legacy corrupted Client ID typo', () => {
-    // Simulate corrupted key in localStorage
-    localStorage.setItem('tasker_google_client_id_v2', '634475536724-0e7apq2ee7p3uktldtip5g54t2ru.apps.googleusercontent.com');
-    const healedId = GoogleAuthService.getClientId();
-    assert(
-      !healedId.includes('uktldtip'),
-      'Should auto-heal typo containing uktldtip'
-    );
-  });
-
-  await runTest('GoogleAuthService', 'saveClientId sets custom Client ID', () => {
+  await runTest('GoogleAuthService', 'saveClientId sets custom Client ID and resets cleanly', () => {
     const custom = '123456789-customclientid12345.apps.googleusercontent.com';
     GoogleAuthService.saveClientId(custom);
     assertEquals(GoogleAuthService.getClientId(), custom, 'Custom Client ID saved');
 
-    // Reset back to verified default
-    GoogleAuthService.saveClientId('541913243201-mjp27m8eubv53hm5dr78o8s89m9h89ua.apps.googleusercontent.com');
+    // Reset back to primary verified client ID
+    GoogleAuthService.saveClientId('634475536724-0e7apq2ee7p3udvuktuldtip5g54t2ru.apps.googleusercontent.com');
     assertEquals(
       GoogleAuthService.getClientId(),
-      '541913243201-mjp27m8eubv53hm5dr78o8s89m9h89ua.apps.googleusercontent.com',
-      'Reset back to default'
+      '634475536724-0e7apq2ee7p3udvuktuldtip5g54t2ru.apps.googleusercontent.com',
+      'Reset back to primary verified Client ID'
     );
   });
 

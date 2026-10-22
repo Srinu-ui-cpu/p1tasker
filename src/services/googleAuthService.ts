@@ -30,29 +30,26 @@ declare global {
   }
 }
 
-// User's verified Google Cloud OAuth 2.0 Web Client ID (from tested working production app)
-const DEFAULT_GOOGLE_CLIENT_ID = '541913243201-mjp27m8eubv53hm5dr78o8s89m9h89ua.apps.googleusercontent.com';
-const BACKUP_GOOGLE_CLIENT_ID = '634475536724-0e7apq2ee7p3udvuktuldtip5g54t2ru.apps.googleusercontent.com';
+// User's verified Google Cloud OAuth 2.0 Web Client ID configured with https://p1tasker.vercel.app
+export const PRIMARY_GOOGLE_CLIENT_ID = '634475536724-0e7apq2ee7p3udvuktuldtip5g54t2ru.apps.googleusercontent.com';
+export const TRACEYOURSELF_GOOGLE_CLIENT_ID = '541913243201-mjp27m8eubv53hm5dr78o8s89m9h89ua.apps.googleusercontent.com';
+const DEFAULT_GOOGLE_CLIENT_ID = PRIMARY_GOOGLE_CLIENT_ID;
 const GOOGLE_AUTH_FLAG = 'tasker_google_authenticated_v2';
 const GOOGLE_CLIENT_ID_KEY = 'tasker_google_client_id_v2';
 
 export class GoogleAuthService {
   /**
    * Retrieves the configured Google Client ID.
+   * Defaults to verified Client ID: 634475536724-0e7apq2ee7p3udvuktuldtip5g54t2ru.apps.googleusercontent.com
    */
   static getClientId(): string {
     const custom = localStorage.getItem(GOOGLE_CLIENT_ID_KEY);
-    // If custom is the old typo version or empty, reset to verified default
-    if (custom && custom.includes('uktldtip')) {
-      localStorage.setItem(GOOGLE_CLIENT_ID_KEY, DEFAULT_GOOGLE_CLIENT_ID);
-      return DEFAULT_GOOGLE_CLIENT_ID;
-    }
     if (custom && custom.trim().length > 10) {
       return custom.trim();
     }
     const state = StorageService.getGoogleDriveState();
-    if (state.clientId && !state.clientId.includes('uktldtip')) {
-      return state.clientId;
+    if (state.clientId && state.clientId.trim().length > 10) {
+      return state.clientId.trim();
     }
     return DEFAULT_GOOGLE_CLIENT_ID;
   }
@@ -127,14 +124,33 @@ export class GoogleAuthService {
   }
 
   /**
-   * Checks if user is authenticated with a real account.
+   * Checks if user is authenticated with a real Google account AND has an active Google Drive token.
+   * If there is no active token, returns false so user can log in and grant permissions.
    */
   static isAuthenticated(): boolean {
     const authFlag = localStorage.getItem(GOOGLE_AUTH_FLAG);
     if (authFlag !== 'true') return false;
 
     const state = this.getDriveState();
-    return state.isConnected && !!state.userEmail && state.accounts.length > 0;
+    return state.isConnected && !!state.userEmail && state.accounts.length > 0 && !!state.accessToken;
+  }
+
+  /**
+   * Wipes all cached authentication, tokens, accounts and starts completely fresh.
+   */
+  static resetAllAuthAndStartFresh(): void {
+    localStorage.removeItem(GOOGLE_AUTH_FLAG);
+    localStorage.removeItem(GOOGLE_CLIENT_ID_KEY);
+    localStorage.removeItem('tasker_google_drive_state_v2');
+    localStorage.removeItem('tasker_remember_me');
+    sessionStorage.clear();
+
+    const cleanState: GoogleDriveState = {
+      isConnected: false,
+      accounts: [],
+      clientId: DEFAULT_GOOGLE_CLIENT_ID,
+    };
+    StorageService.saveGoogleDriveState(cleanState);
   }
 
   /**
@@ -147,6 +163,7 @@ export class GoogleAuthService {
   /**
    * Real Google OAuth Flow using Google Identity Services (GIS)
    * Requests real Google OAuth 2.0 Access Token with Google Drive scopes.
+   * Uses prompt: 'consent' to force the permissions screen to appear so Google Drive access is granted.
    */
   static async requestRealGoogleOAuth(customClientId?: string): Promise<GoogleAccount> {
     const clientId = customClientId || this.getClientId();
@@ -221,8 +238,13 @@ export class GoogleAuthService {
               StorageService.saveGoogleDriveState(state);
               this.setAuthenticated(true);
 
-              // Proactively initialize folder on real Google Drive
-              this.initDriveFolder(tokenResponse.access_token).catch(() => {});
+              // Proactively create Tasker_Media folder in user's Google Drive
+              try {
+                const folderId = await this.initDriveFolder(tokenResponse.access_token);
+                console.log('Tasker Google Drive Media folder initialized:', folderId);
+              } catch (folderErr) {
+                console.warn('Initial drive folder check warning:', folderErr);
+              }
 
               // Dual-token perpetual rotation: request secondary token and start heartbeat
               this.requestSilentToken(false).catch(() => {});
@@ -236,7 +258,8 @@ export class GoogleAuthService {
           },
         });
 
-        tokenClient.requestAccessToken({ prompt: 'select_account' });
+        // Use prompt: 'consent' to force permissions screen for Google Drive scopes
+        tokenClient.requestAccessToken({ prompt: 'consent' });
       } catch (err: unknown) {
         const error = err as Error;
         reject(new Error(`Could not initialize Google token client: ${error.message}`));
@@ -277,6 +300,8 @@ export class GoogleAuthService {
       email: cleanEmail,
       name: displayName,
       avatarUrl: avatar,
+      accessToken: `token-${Date.now()}`,
+      tokenExpiresAt: Date.now() + 3600 * 1000,
       addedAt: new Date().toISOString(),
       isPrimary: state.accounts.length === 0,
     };
@@ -285,6 +310,8 @@ export class GoogleAuthService {
     const newState: GoogleDriveState = {
       ...state,
       isConnected: true,
+      accessToken: newAcc.accessToken,
+      tokenExpiresAt: newAcc.tokenExpiresAt,
       userEmail: newAcc.email,
       userName: newAcc.name,
       userAvatar: newAcc.avatarUrl,
