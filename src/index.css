@@ -95,18 +95,106 @@ html.light .text-white {
 }
 
 /* Ensure buttons and badges with specific text colors stay readable */
-html.light .bg-indigo-600 .text-white,
-html.light .bg-purple-600 .text-white,
-html.light .bg-rose-600 .text-white,
-html.light .bg-emerald-600 .text-white,
+html.light .bg-indigo-600,
+html.light .bg-indigo-600 *,
+html.light .bg-purple-600,
+html.light .bg-purple-600 *,
+html.light .bg-rose-600,
+html.light .bg-rose-600 *,
+html.light .bg-emerald-600,
+html.light .bg-emerald-600 *,
 html.light button.bg-indigo-600,
-html.light button.bg-purple-600 {
+html.light button.bg-purple-600,
+html.light button.bg-emerald-600,
+html.light button.bg-rose-600 {
   color: #ffffff !important;
+}
+
+/* Pastel Tint Badge & Button Overrides for Light Mode */
+html.light .bg-purple-950\/80,
+html.light .bg-purple-950 {
+  background-color: #f3e8ff !important;
+  color: #6b21a8 !important;
+  border-color: #d8b4fe !important;
+}
+html.light .bg-purple-950\/80 *,
+html.light .bg-purple-950 * {
+  color: #6b21a8 !important;
+}
+
+html.light .bg-indigo-950\/80,
+html.light .bg-indigo-950 {
+  background-color: #e0e7ff !important;
+  color: #3730a3 !important;
+  border-color: #a5b4fc !important;
+}
+html.light .bg-indigo-950\/80 *,
+html.light .bg-indigo-950 * {
+  color: #3730a3 !important;
+}
+
+html.light .bg-emerald-950\/80,
+html.light .bg-emerald-950 {
+  background-color: #d1fae5 !important;
+  color: #065f46 !important;
+  border-color: #6ee7b7 !important;
+}
+html.light .bg-emerald-950\/80 *,
+html.light .bg-emerald-950 * {
+  color: #065f46 !important;
+}
+
+html.light .bg-amber-950\/80,
+html.light .bg-amber-950 {
+  background-color: #fef3c7 !important;
+  color: #92400e !important;
+  border-color: #fcd34d !important;
+}
+html.light .bg-amber-950\/80 *,
+html.light .bg-amber-950 * {
+  color: #92400e !important;
+}
+
+html.light .bg-rose-950\/80,
+html.light .bg-rose-950 {
+  background-color: #ffe4e6 !important;
+  color: #9f1239 !important;
+  border-color: #fda4af !important;
+}
+html.light .bg-rose-950\/80 *,
+html.light .bg-rose-950 * {
+  color: #9f1239 !important;
+}
+
+/* Light mode form controls */
+html.light input,
+html.light select,
+html.light textarea {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: #cbd5e1 !important;
+}
+
+html.light input:focus,
+html.light select:focus,
+html.light textarea:focus {
+  border-color: #6366f1 !important;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2) !important;
+}
+
+html.light input::placeholder,
+html.light textarea::placeholder {
+  color: #94a3b8 !important;
 }
 
 /* Document canvas sheet in light mode */
 html.light .prose {
   color: #1e293b !important;
+}
+
+html.light .shadow-xl,
+html.light .shadow-2xl {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04) !important;
 }
 
 /* Custom modern scrollbars */

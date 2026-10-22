@@ -27,11 +27,14 @@ export class StorageService {
         return [];
       }
       const parsed: TaskItem[] = JSON.parse(data);
-      // Cleanse any legacy mock seed tasks
+      // Cleanse only specific legacy mock seed tasks
       const cleaned = parsed.filter(t => 
-        !t.id.startsWith('task-1') && 
-        !t.id.startsWith('task-2') && 
-        !t.id.startsWith('task-3') && 
+        t.id !== 'task-1' &&
+        t.id !== 'task-2' &&
+        t.id !== 'task-3' &&
+        !t.id.startsWith('task-1-') &&
+        !t.id.startsWith('task-2-') &&
+        !t.id.startsWith('task-3-') &&
         !t.title.toLowerCase().includes('shdip') &&
         !t.title.toLowerCase().includes('sprint review')
       );
@@ -64,11 +67,29 @@ export class StorageService {
       tasks.push({ ...task, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     }
     this.saveTasks(tasks);
+    try {
+      import('./googleAuthService').then(({ GoogleAuthService }) => {
+        if (GoogleAuthService.isAuthenticated()) {
+          GoogleAuthService.triggerDriveSync().catch(() => {});
+        }
+      });
+    } catch {
+      // ignore
+    }
   }
 
   static deleteTask(id: string): void {
     const tasks = this.getTasks().filter(t => t.id !== id);
     this.saveTasks(tasks);
+    try {
+      import('./googleAuthService').then(({ GoogleAuthService }) => {
+        if (GoogleAuthService.isAuthenticated()) {
+          GoogleAuthService.triggerDriveSync().catch(() => {});
+        }
+      });
+    } catch {
+      // ignore
+    }
   }
 
   // --- DIARY ENTRIES ---

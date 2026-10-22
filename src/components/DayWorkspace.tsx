@@ -68,7 +68,7 @@ export const DayWorkspace: React.FC<DayWorkspaceProps> = ({
     if (!quickTitle.trim()) return;
 
     const newTask: TaskItem = {
-      id: `task-${Date.now()}`,
+      id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       title: quickTitle.trim(),
       date: currentDate,
       startTime: quickTime || undefined,
@@ -92,6 +92,8 @@ export const DayWorkspace: React.FC<DayWorkspaceProps> = ({
       AlarmService.playAlarmSound('gentle');
       AlarmService.requestNotificationPermission();
       showToast(`Added "${newTask.title}" scheduled for ${quickTime} with alarms active!`);
+    } else {
+      showToast(`Added task "${newTask.title}"!`);
     }
   };
 

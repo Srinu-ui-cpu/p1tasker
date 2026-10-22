@@ -353,9 +353,9 @@ export class GoogleAuthService {
   /**
    * Checks or creates the visible `Tasker App Data` folder in user's root Google Drive.
    */
-  private static async initDriveFolder(accessToken: string): Promise<string> {
+  static async initDriveFolder(accessToken: string): Promise<string> {
     try {
-      // Search for existing Tasker App Data folder in My Drive
+      // Search for existing Tasker App Data folder in My Drive root
       const query = encodeURIComponent("(name = 'Tasker App Data' or name = '📁 Tasker App Data') and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
       const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name,parents)`, {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -401,7 +401,70 @@ export class GoogleAuthService {
   }
 
   /**
+   * Uploads attached images, videos, and documents directly to user's visible `Tasker App Data` folder in Google Drive.
+   */
+  static async uploadMediaFile(
+    fileBlob: Blob | File,
+    filename: string,
+    mimeType: string
+  ): Promise<{ fileId: string; webViewLink?: string } | null> {
+    const state = this.getDriveState();
+    if (!state.accessToken) return null;
+
+    try {
+      const folderId = (state.folderId && state.folderId !== 'tasker-app-data-vault')
+        ? state.folderId
+        : (await this.initDriveFolder(state.accessToken));
+
+      const metadata = {
+        name: filename,
+        parents: (folderId && folderId !== 'tasker-app-data-vault') ? [folderId] : ['root'],
+        mimeType: mimeType || 'application/octet-stream',
+      };
+
+      const form = new FormData();
+      form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      form.append('file', fileBlob);
+
+      const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,webContentLink', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${state.accessToken}`,
+        },
+        body: form,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        return { fileId: data.id, webViewLink: data.webViewLink };
+      }
+    } catch (err) {
+      console.warn('Google Drive media file upload error:', err);
+    }
+    return null;
+  }
+
+  /**
+   * Deletes a file from Google Drive when removed from diary.
+   */
+  static async deleteDriveFile(fileId: string): Promise<boolean> {
+    const state = this.getDriveState();
+    if (!state.accessToken || !fileId || fileId.startsWith('file-')) return false;
+
+    try {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${state.accessToken}` },
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Syncs user's tasks, diary entries, and backup directly to Google Drive.
+   * Media files appear in the visible 'Tasker App Data' folder, while private text is kept hidden in appDataFolder.
    */
   static async triggerDriveSync(): Promise<boolean> {
     const state = this.getDriveState();
@@ -410,10 +473,41 @@ export class GoogleAuthService {
 
     try {
       if (state.accessToken) {
+        // 1. Ensure visible folder exists in root
         const validFolderId = (state.folderId && state.folderId !== 'tasker-app-data-vault')
           ? state.folderId
           : (await this.initDriveFolder(state.accessToken));
 
+        // 2. Upload any un-synced attached images/videos/files into visible Tasker App Data folder
+        try {
+          const registry = StorageService.getFileRegistry();
+          let registryUpdated = false;
+
+          for (const key of Object.keys(registry)) {
+            const item = registry[key];
+            if (!item.driveId && item.dataUrl && item.dataUrl.startsWith('data:')) {
+              try {
+                const blob = await (await fetch(item.dataUrl)).blob();
+                const uploaded = await this.uploadMediaFile(blob, item.name, item.type);
+                if (uploaded?.fileId) {
+                  item.driveId = uploaded.fileId;
+                  registry[key] = item;
+                  registryUpdated = true;
+                }
+              } catch {
+                // Continue
+              }
+            }
+          }
+
+          if (registryUpdated) {
+            StorageService.saveFileRegistry(registry);
+          }
+        } catch (mediaSyncErr) {
+          console.warn('Media sync to Drive folder notice:', mediaSyncErr);
+        }
+
+        // 3. Vault text data (tasks, diary notes) hidden in Google Drive appDataFolder
         const vaultData = {
           syncedAt: new Date().toISOString(),
           account: state.userEmail,
@@ -424,23 +518,45 @@ export class GoogleAuthService {
           fileRegistry: StorageService.getFileRegistry(),
         };
 
-        const metadata = {
-          name: `tasker_vault_${state.userEmail?.replace(/[^a-zA-Z0-9]/g, '_') || 'user'}.json`,
-          parents: (validFolderId && validFolderId !== 'tasker-app-data-vault') ? [validFolderId] : undefined,
+        // Hidden appDataFolder upload so private text is protected
+        const hiddenMetadata = {
+          name: 'tasker_vault.json',
+          parents: ['appDataFolder'],
           mimeType: 'application/json',
         };
 
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', new Blob([JSON.stringify(vaultData, null, 2)], { type: 'application/json' }));
+        const hiddenForm = new FormData();
+        hiddenForm.append('metadata', new Blob([JSON.stringify(hiddenMetadata)], { type: 'application/json' }));
+        hiddenForm.append('file', new Blob([JSON.stringify(vaultData, null, 2)], { type: 'application/json' }));
 
         await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${state.accessToken}`,
           },
-          body: form,
-        });
+          body: hiddenForm,
+        }).catch(() => {});
+
+        // Also save a hidden-format backup dotfile in folder
+        if (validFolderId && validFolderId !== 'tasker-app-data-vault') {
+          const folderMetadata = {
+            name: `.tasker_vault_${state.userEmail?.replace(/[^a-zA-Z0-9]/g, '_') || 'user'}.json`,
+            parents: [validFolderId],
+            mimeType: 'application/json',
+          };
+
+          const folderForm = new FormData();
+          folderForm.append('metadata', new Blob([JSON.stringify(folderMetadata)], { type: 'application/json' }));
+          folderForm.append('file', new Blob([JSON.stringify(vaultData, null, 2)], { type: 'application/json' }));
+
+          await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${state.accessToken}`,
+            },
+            body: folderForm,
+          }).catch(() => {});
+        }
       }
     } catch (e) {
       console.warn('Real Google Drive upload completed with local vault fallback:', e);

@@ -1256,6 +1256,71 @@ End of meeting notes.`;
     assert(content.includes('USAGE.md'), 'README.md links to USAGE.md');
     assert(content.includes('FEATURES.md'), 'README.md links to FEATURES.md');
   });
+
+  // =========================================================================
+  // SUITE 13: Dashboard Task Creation, AI Summarize/Translate, and Drive Vault Privacy
+  // =========================================================================
+  console.log('\n>> Running Suite 13: Dashboard Tasks, Diary AI Summarize/Translate & Drive Privacy');
+
+  await runTest('DashboardTaskCreation', 'Timestamp-based tasks (task-1792...) persist without false-positive cleansing', () => {
+    const testTaskId = `task-${Date.now()}-abc`;
+    const testTask: TaskItem = {
+      id: testTaskId,
+      title: 'Verify Dashboard Task Persistence',
+      date: '2026-10-22',
+      priority: 'high',
+      status: 'todo',
+      tags: [],
+      subtasks: [],
+      alarmEnabled: false,
+      attachments: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    StorageService.saveTask(testTask);
+    const retrieved = StorageService.getTasks();
+    const found = retrieved.find(t => t.id === testTaskId);
+
+    assert(found !== undefined, 'Timestamp-based task must NOT be cleansed');
+    assertEquals(found?.title, 'Verify Dashboard Task Persistence', 'Task title matches');
+
+    // Clean up
+    StorageService.deleteTask(testTaskId);
+  });
+
+  await runTest('DiaryViewAI', 'DiaryView includes AI Summarize and AI Translate with language dropdown', () => {
+    const diaryViewPath = path.resolve(process.cwd(), 'src/components/DiaryView.tsx');
+    const content = fs.readFileSync(diaryViewPath, 'utf8');
+
+    assert(content.includes('AI Summarize'), 'Must include AI Summarize button');
+    assert(content.includes('handleSummarize'), 'Must implement handleSummarize');
+    assert(content.includes('Translate'), 'Must include Translate button');
+    assert(content.includes('handleTranslate'), 'Must implement handleTranslate');
+    assert(content.includes('TRANSLATION_LANGUAGES'), 'Must provide language dropdown list');
+    assert(content.includes('showSummaryModal'), 'Must provide summary modal');
+    assert(content.includes('showTranslateModal'), 'Must provide translation modal');
+  });
+
+  await runTest('GoogleDriveVaultPrivacy', 'GoogleAuthService creates visible root folder, uploads media, and hides text vault', () => {
+    const authServicePath = path.resolve(process.cwd(), 'src/services/googleAuthService.ts');
+    const content = fs.readFileSync(authServicePath, 'utf8');
+
+    assert(content.includes("parents: ['root']"), 'Visible folder created in root of My Drive');
+    assert(content.includes('uploadMediaFile'), 'Must implement uploadMediaFile for images/videos/documents');
+    assert(content.includes("parents: ['appDataFolder']"), 'Private text vault stored hidden in appDataFolder');
+    assert(content.includes('deleteDriveFile'), 'Must implement deleteDriveFile for attachment deletion');
+  });
+
+  await runTest('ThemeContrastStyles', 'index.css defines high-contrast rules for light and dark modes', () => {
+    const cssPath = path.resolve(process.cwd(), 'src/index.css');
+    const content = fs.readFileSync(cssPath, 'utf8');
+
+    assert(content.includes('html.light body'), 'Defines light mode body background and text');
+    assert(content.includes('html.light .bg-indigo-600'), 'Defines light mode button text contrast');
+    assert(content.includes('html.light input'), 'Defines light mode form controls');
+    assert(content.includes('html.light .bg-purple-950'), 'Defines light mode badge pill contrast');
+  });
   console.log('\n===============================================================');
   console.log('                 AUDIT EXECUTION RESULTS');
   console.log('===============================================================');

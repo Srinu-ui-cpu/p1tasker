@@ -23,7 +23,10 @@ import {
   Maximize2,
   FolderOpen,
   Image as ImageIcon,
-  CheckCircle2
+  CheckCircle2,
+  Languages,
+  ListCollapse,
+  Copy
 } from 'lucide-react';
 import { DiaryEntry, FileAttachment } from '../types';
 import { StorageService } from '../services/storageService';
@@ -68,6 +71,29 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
   // Multilingual Dictation State
   const [dictationLang, setDictationLang] = useState('te-IN'); // Default to Telugu / Multilingual
   const dictationBaseRef = useRef<string>('');
+
+  // Multilingual Translation State
+  const [selectedTranslateLang, setSelectedTranslateLang] = useState('Telugu');
+  const [translationResult, setTranslationResult] = useState<string | null>(null);
+  const [showTranslateModal, setShowTranslateModal] = useState(false);
+
+  // AI Summary State
+  const [summaryResult, setSummaryResult] = useState<string | null>(null);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
+
+  const TRANSLATION_LANGUAGES = [
+    { code: 'Telugu', label: 'Telugu (తెలుగు)' },
+    { code: 'Hindi', label: 'Hindi (हिंदी)' },
+    { code: 'Spanish', label: 'Spanish (Español)' },
+    { code: 'French', label: 'French (Français)' },
+    { code: 'German', label: 'German (Deutsch)' },
+    { code: 'Japanese', label: 'Japanese (日本語)' },
+    { code: 'Chinese', label: 'Chinese (中文)' },
+    { code: 'Arabic', label: 'Arabic (العربية)' },
+    { code: 'Russian', label: 'Russian (Русский)' },
+    { code: 'Portuguese', label: 'Portuguese (Português)' },
+    { code: 'English', label: 'English' },
+  ];
 
   const DICTATION_LANGUAGES = [
     { code: 'te-IN', label: 'Telugu (తెలుగు 🇮🇳)' },
@@ -174,6 +200,60 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
     }
   };
 
+  // --- 📑 AI DIARY SUMMARIZE ---
+  const handleSummarize = async () => {
+    if (!entry.content.trim()) {
+      setAiNotification('Write or dictate some diary text first before summarizing!');
+      setTimeout(() => setAiNotification(null), 3000);
+      return;
+    }
+    setAiLoading(true);
+    setAiNotification('🧠 Generating AI diary summary...');
+    try {
+      const prompt = `Summarize this diary entry into 3-4 clear, insightful bullet points capturing key events, emotional reflections, and action items:\n\n${entry.content}`;
+      const res = await AIBrokerService.completeText(prompt, 'You are an executive biographer and summarizer.');
+      const summaryText = res.text.trim();
+      
+      const updated: DiaryEntry = {
+        ...entry,
+        aiSummary: summaryText,
+        updatedAt: new Date().toISOString(),
+      };
+      setEntry(updated);
+      StorageService.saveDiaryForDate(updated);
+      setSummaryResult(summaryText);
+      setShowSummaryModal(true);
+      setAiNotification(`✔ Diary summarized (${res.modelUsed})`);
+    } catch {
+      setAiNotification('Summary generation failed. Check your network or AI settings.');
+    } finally {
+      setAiLoading(false);
+      setTimeout(() => setAiNotification(null), 3500);
+    }
+  };
+
+  // --- 🌐 AI MULTILINGUAL TRANSLATION ---
+  const handleTranslate = async () => {
+    if (!entry.content.trim()) {
+      setAiNotification('Write some diary text first before translating!');
+      setTimeout(() => setAiNotification(null), 3000);
+      return;
+    }
+    setAiLoading(true);
+    setAiNotification(`🌐 Translating into ${selectedTranslateLang}...`);
+    try {
+      const res = await AIBrokerService.translateText(entry.content, selectedTranslateLang);
+      setTranslationResult(res.translatedText);
+      setShowTranslateModal(true);
+      setAiNotification(`✔ Translated into ${selectedTranslateLang}!`);
+    } catch {
+      setAiNotification('Translation failed. Check your network or AI settings.');
+    } finally {
+      setAiLoading(false);
+      setTimeout(() => setAiNotification(null), 3500);
+    }
+  };
+
   // --- 🔊 TEXT TO SPEECH (READ ALOUD) ---
   const handleToggleSpeak = () => {
     if (isSpeaking) {
@@ -229,8 +309,20 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
       setAiNotification(`✨ Attached "${file.name}" to diary!`);
       setTimeout(() => setAiNotification(null), 3500);
 
-      // Proactively sync media file to Google Drive vault
+      // Proactively upload media file to Google Drive vault
       if (GoogleAuthService.isAuthenticated()) {
+        GoogleAuthService.uploadMediaFile(file, file.name, file.type).then((uploaded) => {
+          if (uploaded?.fileId) {
+            setEntry((prev) => {
+              const updatedAttachments = prev.attachments.map((a) =>
+                a.id === attachment.id ? { ...a, driveId: uploaded.fileId } : a
+              );
+              const withDriveId = { ...prev, attachments: updatedAttachments };
+              StorageService.saveDiaryForDate(withDriveId);
+              return withDriveId;
+            });
+          }
+        }).catch(() => {});
         GoogleAuthService.triggerDriveSync().catch(() => {});
       }
     } catch (err: unknown) {
@@ -276,6 +368,9 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
 
     // Sync removal to Google Drive cloud vault
     if (GoogleAuthService.isAuthenticated()) {
+      if (toRemove.driveId) {
+        GoogleAuthService.deleteDriveFile(toRemove.driveId).catch(() => {});
+      }
       GoogleAuthService.triggerDriveSync().catch(() => {});
     }
 
@@ -374,6 +469,44 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
             <Sparkles className="w-3.5 h-3.5 text-purple-400" />
             <span>✨ Fix Errors & Sentences</span>
           </button>
+
+          {/* 📑 AI Summarize Button */}
+          <button
+            type="button"
+            disabled={aiLoading || !entry.content.trim()}
+            onClick={handleSummarize}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 border border-emerald-800/80 text-xs font-bold disabled:opacity-40 transition shadow-sm cursor-pointer"
+            title="Summarize diary entry into concise bullet points using AI"
+          >
+            <ListCollapse className="w-3.5 h-3.5 text-emerald-400" />
+            <span>AI Summarize</span>
+          </button>
+
+          {/* 🌐 AI Translate with Language Dropdown */}
+          <div className="flex items-center bg-slate-800 rounded-xl p-0.5 border border-slate-700">
+            <select
+              value={selectedTranslateLang}
+              onChange={(e) => setSelectedTranslateLang(e.target.value)}
+              className="bg-transparent text-slate-300 text-[11px] px-2 py-1 focus:outline-none cursor-pointer"
+              title="Select target language for translation"
+            >
+              {TRANSLATION_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code} className="bg-slate-900 text-white">
+                  {l.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              disabled={aiLoading || !entry.content.trim()}
+              onClick={handleTranslate}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40 transition cursor-pointer"
+              title="Translate diary content into chosen language using AI"
+            >
+              <Languages className="w-3.5 h-3.5" />
+              <span>Translate</span>
+            </button>
+          </div>
 
           {/* 🎙️ Multilingual Voice-to-Text */}
           <div className="flex items-center bg-slate-800 rounded-xl p-0.5 border border-slate-700">
@@ -647,6 +780,146 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
               >
                 Delete File
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4. AI Diary Summary Modal */}
+      {showSummaryModal && summaryResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-950 border border-emerald-800 text-emerald-400">
+                  <ListCollapse className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">AI Diary Summary</h3>
+                  <p className="text-xs text-slate-400">Executive highlights for {format(parsedDate, 'MMMM d, yyyy')}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowSummaryModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed max-h-80 overflow-y-auto">
+              {summaryResult}
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(summaryResult);
+                  setAiNotification('✔ Copied summary to clipboard!');
+                  setTimeout(() => setAiNotification(null), 2500);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy Summary</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowSummaryModal(false)}
+                  className="px-3.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const block = `\n\n---\n### 📌 AI Summary:\n${summaryResult}\n`;
+                    handleSaveContent(entry.content + block);
+                    setShowSummaryModal(false);
+                    setAiNotification('✔ Appended AI summary to diary!');
+                    setTimeout(() => setAiNotification(null), 3000);
+                  }}
+                  className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Paste into Diary</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. AI Translation Modal */}
+      {showTranslateModal && translationResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-lg w-full shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-950 border border-indigo-800 text-indigo-400">
+                  <Languages className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">AI Translation ({selectedTranslateLang})</h3>
+                  <p className="text-xs text-slate-400">Target language: {selectedTranslateLang}</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowTranslateModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-950 rounded-2xl border border-slate-800 text-sm text-slate-200 whitespace-pre-wrap leading-relaxed max-h-80 overflow-y-auto">
+              {translationResult}
+            </div>
+
+            <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(translationResult);
+                  setAiNotification('✔ Copied translation to clipboard!');
+                  setTimeout(() => setAiNotification(null), 2500);
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>Copy</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const block = `\n\n---\n### 🌐 Translation (${selectedTranslateLang}):\n${translationResult}\n`;
+                    handleSaveContent(entry.content + block);
+                    setShowTranslateModal(false);
+                    setAiNotification(`✔ Appended ${selectedTranslateLang} translation!`);
+                    setTimeout(() => setAiNotification(null), 3000);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition"
+                >
+                  Append Below
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSaveContent(translationResult);
+                    setShowTranslateModal(false);
+                    setAiNotification(`✔ Replaced diary with ${selectedTranslateLang} translation!`);
+                    setTimeout(() => setAiNotification(null), 3000);
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition shadow-sm cursor-pointer"
+                >
+                  Replace Diary
+                </button>
+              </div>
             </div>
           </div>
         </div>
