@@ -137,6 +137,12 @@ export interface GoogleAccount {
   isPrimary?: boolean;
 }
 
+export interface TokenSlot {
+  token: string;
+  issuedAt: number;
+  expiresAt: number;
+}
+
 export interface GoogleDriveState {
   isConnected: boolean;
   clientId?: string;
@@ -145,10 +151,15 @@ export interface GoogleDriveState {
   userName?: string;
   userAvatar?: string;
   folderId?: string;
+  isFolderPublic?: boolean;
   lastSyncedAt?: string;
   isSyncing: boolean;
   accounts: GoogleAccount[];
   activeStorageAccountEmail?: string;
+  // Dual-token rotating refresh engine
+  tokenA?: TokenSlot;
+  tokenB?: TokenSlot;
+  activeSlot?: 'A' | 'B';
 }
 
 export interface EncryptedBackupBundle {
