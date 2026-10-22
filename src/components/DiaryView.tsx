@@ -210,8 +210,8 @@ export const DiaryView: React.FC<DiaryViewProps> = ({
     setAiLoading(true);
     setAiNotification('🧠 Generating AI diary summary...');
     try {
-      const prompt = `Summarize this diary entry into 3-4 clear, insightful bullet points capturing key events, emotional reflections, and action items:\n\n${entry.content}`;
-      const res = await AIBrokerService.completeText(prompt, 'You are an executive biographer and summarizer.');
+      const prompt = `Summarize the following diary entry into 3 to 5 clear, insightful bullet points capturing key events, reflections, and action items. Output ONLY clean bullet points starting with '• ', without bold category headers or artificial prefixes:\n\n${entry.content}`;
+      const res = await AIBrokerService.completeText(prompt, 'You are an executive biographer and summarizer. Return ONLY clean bullet points starting with • without category headers or bold prefixes.');
       const summaryText = res.text
         .replace(/^```(?:markdown|text)?\n?/i, '')
         .replace(/\n?```$/i, '')

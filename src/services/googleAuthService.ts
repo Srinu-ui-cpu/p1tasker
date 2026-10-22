@@ -95,6 +95,12 @@ export class GoogleAuthService {
       }
     }
 
+    // Cleanse any stale placeholder folder ID that caused 404s in Google Drive
+    if (raw.folderId && raw.folderId.includes('tasker-app-data-vault')) {
+      raw.folderId = undefined;
+      StorageService.saveGoogleDriveState(raw);
+    }
+
     if (!raw.accounts) {
       raw.accounts = [];
     }
@@ -341,13 +347,14 @@ export class GoogleAuthService {
 
   /**
    * Returns the direct web URL to the user's Tasker App Data folder in Google Drive.
+   * If folder has not yet been assigned a real Google Drive ID, points directly to My Drive root.
    */
   static getDriveFolderUrl(): string {
     const state = this.getDriveState();
-    if (state.folderId && state.folderId !== 'tasker-app-data-vault' && /^[a-zA-Z0-9_-]{15,}$/.test(state.folderId)) {
+    if (state.folderId && !state.folderId.includes('tasker-app-data-vault') && /^[a-zA-Z0-9_-]{20,}$/.test(state.folderId)) {
       return `https://drive.google.com/drive/folders/${state.folderId}`;
     }
-    return `https://drive.google.com/drive/search?q=Tasker`;
+    return `https://drive.google.com/drive/u/0/my-drive`;
   }
 
   /**
@@ -415,20 +422,30 @@ export class GoogleAuthService {
 
   /**
    * Opens the user's `Tasker App Data` folder in a new browser tab.
-   * Proactively verifies folder creation before opening.
+   * If not yet created or token is inactive, opens user's My Drive directly (https://drive.google.com/drive/u/0/my-drive)
+   * so the user never sees a 404 error.
    */
   static async openDriveFolderInNewTab(): Promise<void> {
     const state = this.getDriveState();
-    let folderId = (state.folderId && state.folderId !== 'tasker-app-data-vault') ? state.folderId : null;
+    let folderId = (state.folderId && !state.folderId.includes('tasker-app-data-vault') && /^[a-zA-Z0-9_-]{20,}$/.test(state.folderId))
+      ? state.folderId
+      : null;
 
     if (!folderId && state.accessToken) {
-      folderId = await this.initDriveFolder(state.accessToken);
+      try {
+        const createdId = await this.initDriveFolder(state.accessToken);
+        if (createdId && !createdId.includes('tasker-app-data-vault') && /^[a-zA-Z0-9_-]{20,}$/.test(createdId)) {
+          folderId = createdId;
+        }
+      } catch {
+        // fallback
+      }
     }
 
-    if (folderId && folderId !== 'tasker-app-data-vault') {
+    if (folderId) {
       window.open(`https://drive.google.com/drive/folders/${folderId}`, '_blank');
     } else {
-      window.open('https://drive.google.com/drive/search?q=Tasker', '_blank');
+      window.open('https://drive.google.com/drive/u/0/my-drive', '_blank');
     }
   }
 

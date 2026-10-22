@@ -730,24 +730,96 @@ Your objective is to fix all mistakes and rewrite awkward spoken fragments into 
       (config.activeProvider === 'openai' && !!config.apiKeys.openai) ||
       (config.activeProvider === 'custom' && !!config.customConfig.apiKey);
 
+    const translationPrompt = `Translate the following text into ${targetLanguage}. Provide ONLY the direct, natural, and fluent translation in ${targetLanguage}. Do NOT write preambles, introductory chatter, English explanations, or markdown code blocks:\n\n${text}`;
+    const systemPrompt = `You are a professional polyglot translator. Translate accurately into ${targetLanguage} with natural tone. Output ONLY the translated text without code fences or English preambles.`;
+
+    // 1. Try configured LLM with user's active API key
     if (hasApiKey) {
       try {
-        const systemPrompt = `You are an expert polyglot translator.
-Translate the text into ${targetLanguage}.
-Provide a natural, fluent, and culturally authentic translation.
-Return ONLY the direct translated text without any explanation, markdown backticks, or intro/outro.`;
+        const res = await this.completeText(translationPrompt, systemPrompt);
+        let cleaned = res.text
+          .replace(/^```(?:markdown|text)?\n?/i, '')
+          .replace(/\n?```$/i, '')
+          .replace(/^[ \t]{4,}/gm, '')
+          .trim();
 
-        const res = await this.completeText(text, systemPrompt);
-        return {
-          translatedText: res.text.trim(),
-          modelUsed: res.modelUsed,
-        };
+        if (cleaned && !cleaned.startsWith('### 📑 Deep Semantic Text Analysis') && !cleaned.includes('I received your message regarding')) {
+          return {
+            translatedText: cleaned,
+            modelUsed: res.modelUsed,
+          };
+        }
       } catch (err) {
-        console.warn('AI translation error, falling back to local translation engine:', err);
+        console.warn('AI translation with API key failed, falling back:', err);
       }
     }
 
-    // Built-in Offline Translation Engine
+    // 2. Try Live Cloud AI
+    try {
+      const liveRes = await this.callFreeLiveAI(translationPrompt, systemPrompt, 'Tasker Translator');
+      let cleaned = liveRes.text
+        .replace(/^```(?:markdown|text)?\n?/i, '')
+        .replace(/\n?```$/i, '')
+        .replace(/^[ \t]{4,}/gm, '')
+        .trim();
+
+      if (cleaned && !cleaned.startsWith('### 📑 Deep Semantic Text Analysis')) {
+        return {
+          translatedText: cleaned,
+          modelUsed: liveRes.modelUsed,
+        };
+      }
+    } catch (e) {
+      console.warn('Live cloud AI translation unavailable, trying neural translation API:', e);
+    }
+
+    // 3. Try Real-Time Public Neural Translation API (MyMemory)
+    try {
+      const langCodeMap: Record<string, string> = {
+        telugu: 'te',
+        hindi: 'hi',
+        spanish: 'es',
+        french: 'fr',
+        german: 'de',
+        japanese: 'ja',
+        chinese: 'zh-CN',
+        arabic: 'ar',
+        russian: 'ru',
+        portuguese: 'pt',
+        english: 'en',
+      };
+      const targetCode = langCodeMap[targetLanguage.toLowerCase()] || 'te';
+
+      // Split into sentences / segments under 450 chars for API
+      const segments = text.split(/(?<=[.!?\n])\s+/).filter(s => s.trim().length > 0);
+      const translatedSegments: string[] = [];
+
+      for (const seg of segments.slice(0, 8)) {
+        const encoded = encodeURIComponent(seg.trim().slice(0, 450));
+        const res = await fetch(`https://api.mymemory.translated.net/get?q=${encoded}&langpair=en|${targetCode}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.responseData?.translatedText && !data.responseData.translatedText.includes('QUERY LENGTH LIMIT')) {
+            translatedSegments.push(data.responseData.translatedText);
+          } else {
+            translatedSegments.push(seg);
+          }
+        } else {
+          translatedSegments.push(seg);
+        }
+      }
+
+      if (translatedSegments.length > 0) {
+        return {
+          translatedText: translatedSegments.join(' '),
+          modelUsed: `Neural Translator (${targetLanguage})`,
+        };
+      }
+    } catch (apiErr) {
+      console.warn('Neural translation API notice:', apiErr);
+    }
+
+    // 4. Built-in Offline Translation Engine
     return this.localTranslation(text, targetLanguage, 'Tasker Translation Engine');
   }
 
@@ -988,13 +1060,13 @@ Return ONLY the direct translated text without any explanation, markdown backtic
         translated = translated.replace(regex, tr);
       });
       return {
-        translatedText: `[${targetLanguage}]: ${translated}`,
+        translatedText: translated,
         modelUsed: `${modelName} (${targetLanguage})`,
       };
     }
 
     return {
-      translatedText: `[${targetLanguage} Translation]: ${text}`,
+      translatedText: text,
       modelUsed: `${modelName} (${targetLanguage})`,
     };
   }
@@ -1026,7 +1098,7 @@ Return ONLY the direct translated text without any explanation, markdown backtic
     // If user asked to summarize but hasn't written any diary text or tasks yet
     if (isSummaryRequest && !hasDiaryContent && tasksForDay.length === 0) {
       return {
-        responseText: `You haven't written any thoughts or recorded tasks in your diary for **${diaryEntry.date}** yet!\n\nOnce you write or voice-dictate your entry in the document canvas above, ask me again and I'll generate an insightful, personal summary and reflection for you.`,
+        responseText: `You haven't written any thoughts or recorded tasks in your diary for **${diaryEntry.date}** yet!\n\nOnce you write or voice-dictate your entry in the document canvas above, ask me again and I'll generate a clean summary and reflection for you.`,
         modelUsed: 'Tasker Diary Companion',
       };
     }
@@ -1036,8 +1108,9 @@ Return ONLY the direct translated text without any explanation, markdown backtic
       .map(m => `${m.sender === 'user' ? 'User' : 'Diary AI Companion'}: ${m.content}`)
       .join('\n');
 
-    const systemPrompt = `You are the user's empathetic, highly perceptive AI Diary Companion and Life Coach for date [${diaryEntry.date}].
-Your role is to help the user reflect deeply, unpack emotions, find clarity, celebrate wins, and summarize their day.
+    const systemPrompt = `You are the user's personal AI Diary Companion (like ChatGPT or Google Gemini).
+You speak in a warm, natural, thoughtful, and articulate human tone.
+Respond conversationally, just like a knowledgeable friend or coach.
 
 USER'S ACTUAL WRITTEN DIARY FOR [${diaryEntry.date}]:
 """
@@ -1050,11 +1123,11 @@ ${taskSummary}
 RECENT CONVERSATION HISTORY:
 ${historySnippet || 'Conversation started.'}
 
-CRITICAL RULES:
-1. When asked to summarize or provide a reflection, base your answer STRICTLY on what the user actually wrote in their diary above and their tasks.
-2. Highlight real personal achievements, challenges, feelings, and progress from the diary.
-3. Be warm, personal, thoughtful, and inspiring. Never echo prompts or output generic placeholders.
-4. Output clean markdown. Never wrap your entire reply in code blocks.`;
+CRITICAL FORMATTING GUIDELINES (STYLE LIKE CHATGPT / GEMINI):
+1. NO ROBOTIC HEADERS: Do NOT use markdown headings like "###" or "####", and do NOT use excessive asterisks (***).
+2. NO ROBOTIC CATEGORY LABELS: Do NOT prefix bullet points with bold categories like "• **Core Experience**:".
+3. NATURAL HUMAN CADENCE: Write in clean, friendly paragraphs with simple bullet points (• ) where helpful.
+4. If summarizing the day, provide a concise, personal overview of their actual reflections and tasks, followed by an encouraging check-in question.`;
 
     let effectivePrompt = userMessage;
     if (isSummaryRequest) {
@@ -1064,11 +1137,13 @@ CRITICAL RULES:
     const res = await this.completeText(effectivePrompt, systemPrompt);
     let replyText = res.text.trim();
 
-    // Guard against generic echo if simulated engine was used
+    // Guard against generic echo or template artifacts if simulated engine was used
     if (
       isSummaryRequest &&
       (replyText.includes('• Summarize my day into an inspiring closing reflection') ||
        replyText.includes('I received your message regarding') ||
+       replyText.includes('### 🌅 Daily Reflection') ||
+       replyText.includes('### 📊 Review for Today') ||
        replyText.startsWith('### 📑 Deep Semantic Text Analysis'))
     ) {
       replyText = this.buildOfflineDiarySummary(diaryEntry, tasksForDay);
@@ -1081,7 +1156,7 @@ CRITICAL RULES:
   }
 
   /**
-   * Generates an authentic, structured diary summary from the user's real diary content and tasks
+   * Generates a conversational diary summary from the user's real diary content and tasks (ChatGPT/Gemini style)
    */
   private static buildOfflineDiarySummary(
     diaryEntry: { date: string; content: string; mood?: string },
@@ -1095,39 +1170,34 @@ CRITICAL RULES:
       .filter(s => s.length > 8 && !s.toLowerCase().startsWith('summarize') && !s.toLowerCase().startsWith('please'));
 
     const doneTasks = tasksForDay.filter(t => t.status === 'done');
-    const pendingTasks = tasksForDay.filter(t => t.status !== 'done');
 
-    let summary = `### 🌅 Daily Reflection & Summary (${diaryEntry.date})\n\n`;
-
+    const bullets: string[] = [];
     if (cleanSentences.length > 0) {
-      summary += `#### 📖 Key Journal Reflections\n`;
-      summary += `• **Core Experience**: "${cleanSentences[0]}."\n`;
+      bullets.push(`• ${cleanSentences[0]}.`);
       if (cleanSentences.length > 1) {
-        summary += `• **Notable Moment**: "${cleanSentences[1]}."\n`;
+        bullets.push(`• ${cleanSentences[1]}.`);
       }
       if (cleanSentences.length > 2) {
-        summary += `• **Key Thought**: "${cleanSentences[cleanSentences.length - 1]}."\n`;
+        bullets.push(`• ${cleanSentences[cleanSentences.length - 1]}.`);
       }
-      summary += `\n`;
     }
 
-    if (tasksForDay.length > 0) {
-      summary += `#### 🎯 Productivity & Progress\n`;
-      summary += `• **Completed**: ${doneTasks.length > 0 ? doneTasks.map(t => t.title).join(', ') : 'None marked done yet'}.\n`;
-      if (pendingTasks.length > 0) {
-        summary += `• **In Progress**: ${pendingTasks.slice(0, 3).map(t => t.title).join(', ')}.\n`;
-      }
-      summary += `\n`;
+    if (doneTasks.length > 0) {
+      bullets.push(`• Completed key tasks: ${doneTasks.map(t => t.title).join(', ')}.`);
+    }
+
+    let response = `Here is a summary of your day:\n\n`;
+    if (bullets.length > 0) {
+      response += `${bullets.join('\n')}\n\n`;
     }
 
     if (diaryEntry.mood) {
-      summary += `• **Recorded Mood**: ✨ **${diaryEntry.mood.toUpperCase()}**\n\n`;
+      response += `You recorded feeling ${diaryEntry.mood}. `;
     }
 
-    summary += `#### 💡 Inspiring Closing Reflection\n`;
-    summary += `You made meaningful progress today. By capturing your thoughts and staying intentional with your daily goals, you are building lasting clarity and momentum. Rest well and bring your best energy tomorrow!`;
+    response += `You stayed focused and made real progress today. What would you like to prioritize next?`;
 
-    return summary;
+    return response;
   }
 
 
@@ -1421,17 +1491,21 @@ Offline capabilities ready now:
     }
 
     // 2. Summary request
-    if (lowerPrompt.includes('summarize this diary') || lowerPrompt.includes('3 concise bullet') || (lowerPrompt.startsWith('summarize') && prompt.length > 25)) {
+    if (lowerPrompt.includes('summarize this diary') || lowerPrompt.includes('3 concise bullet') || (lowerPrompt.startsWith('summarize') && prompt.length > 20)) {
       // Extract the diary text passed inside the prompt
-      let textToSummarize = prompt
-        .replace(/^[\s\S]*?(?:diary entry|bullet points|diary text|here is what i wrote|diary content|based on my diary text)[:\s"]+/i, '')
-        .replace(/["']\s*$/, '')
-        .trim();
+      let textToSummarize = '';
+      if (prompt.includes('\n\n')) {
+        textToSummarize = prompt.split('\n\n').slice(1).join('\n\n').trim();
+      } else {
+        textToSummarize = prompt
+          .replace(/^[\s\S]*?(?:diary entry|bullet points|diary text|here is what i wrote|diary content|based on my diary text)[:\s"]+/i, '')
+          .replace(/["']\s*$/, '')
+          .trim();
+      }
 
-      // If text wasn't prefixed with those markers, take the prompt after the first command line
       if (!textToSummarize || textToSummarize.toLowerCase().startsWith('summarize')) {
         const lines = prompt.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-        const nonCommandLines = lines.filter(l => !l.toLowerCase().startsWith('summarize') && !l.toLowerCase().startsWith('please'));
+        const nonCommandLines = lines.filter(l => !l.toLowerCase().startsWith('summarize') && !l.toLowerCase().startsWith('please') && !l.toLowerCase().startsWith('output only'));
         textToSummarize = nonCommandLines.join('. ');
       }
 
@@ -1439,13 +1513,20 @@ Offline capabilities ready now:
         .replace(/\{\{(?:attachment|file):[^}]+\}\}/g, '')
         .split(/[.!?\n]+/)
         .map(s => s.trim())
-        .filter(s => s.length > 8 && !s.toLowerCase().startsWith('summarize') && !s.toLowerCase().startsWith('please'));
+        .filter(s => s.length > 8 && !s.toLowerCase().startsWith('summarize') && !s.toLowerCase().startsWith('please') && !s.toLowerCase().startsWith('output only') && !s.toLowerCase().startsWith('into 3'));
 
-      let bullet1 = sentences[0] || 'Reflected on daily accomplishments and key milestones.';
-      let bullet2 = sentences[1] || 'Maintained steady momentum across scheduled commitments.';
-      let bullet3 = sentences[2] || 'Organized next priorities and strategic focus for tomorrow.';
+      const bullets: string[] = [];
+      if (sentences.length > 0) {
+        for (let i = 0; i < Math.min(sentences.length, 5); i++) {
+          bullets.push(`• ${sentences[i].replace(/[.]+$/, '')}.`);
+        }
+      } else {
+        bullets.push('• Reflected on daily accomplishments and key priorities.');
+        bullets.push('• Maintained steady momentum across active tasks and schedule.');
+        bullets.push('• Prepared next steps and key focus areas for tomorrow.');
+      }
 
-      const summaryText = `• **Key Milestone**: ${bullet1.replace(/[.]+$/, '')}.\n• **Progress & Focus**: ${bullet2.replace(/[.]+$/, '')}.\n• **Next Horizon**: ${bullet3.replace(/[.]+$/, '')}.`;
+      const summaryText = bullets.join('\n');
       return Promise.resolve({
         text: summaryText,
         modelUsed: `${providerName} (Summarizer Engine)`,
@@ -1623,30 +1704,45 @@ Offline capabilities ready now:
       });
     }
 
-    // 10. TEXT ANALYSIS ENGINE TRIGGER
-    // Triggers if query explicitly asks to analyze/evaluate/critique OR if user provided a text passage (> 100 chars with multiple sentences)
+    // 10. TEXT ANALYSIS ENGINE TRIGGER (Strictly guarded for explicit critique commands)
+    const isEditorialTask = (systemInstruction || '').toLowerCase().includes('proofread') ||
+      (systemInstruction || '').toLowerCase().includes('polisher') ||
+      (systemInstruction || '').toLowerCase().includes('biographer') ||
+      (systemInstruction || '').toLowerCase().includes('diary companion') ||
+      (systemInstruction || '').toLowerCase().includes('summarizer') ||
+      (systemInstruction || '').toLowerCase().includes('translator') ||
+      lowerPrompt.includes('translate');
+
     const isExplicitAnalysis =
-      lowerPrompt.includes('analyze') ||
-      lowerPrompt.includes('analysis') ||
-      lowerPrompt.includes('evaluate') ||
-      lowerPrompt.includes('evaluation') ||
-      lowerPrompt.includes('critique') ||
-      lowerPrompt.includes('breakdown') ||
-      lowerPrompt.includes('break down') ||
-      lowerPrompt.includes('sentiment') ||
-      lowerPrompt.includes('examine') ||
-      lowerPrompt.includes('readability') ||
-      lowerPrompt.includes('key findings') ||
-      lowerPrompt.includes('what do you think of this') ||
-      lowerPrompt.includes('review this');
+      !isEditorialTask &&
+      (lowerPrompt.startsWith('analyze') ||
+       lowerPrompt.startsWith('analysis of') ||
+       lowerPrompt.startsWith('evaluate this') ||
+       lowerPrompt.startsWith('critique this') ||
+       lowerPrompt.startsWith('deep semantic text analysis') ||
+       lowerPrompt.includes('provide an in-depth analysis'));
 
     const hasLongTextPassage = prompt.length > 120 && (prompt.includes('\n') || (prompt.match(/[.!?]/g) || []).length >= 2);
 
-    if (isExplicitAnalysis || hasLongTextPassage) {
+    if (isExplicitAnalysis && hasLongTextPassage) {
       const analysisResult = this.performSemanticTextAnalysis(prompt, systemInstruction || '', providerName);
       return Promise.resolve({
         text: analysisResult,
         modelUsed: `${providerName} (Text Analysis Engine)`,
+      });
+    }
+
+    // 10.5 TRANSLATION INQUIRY TRIGGER
+    if (lowerPrompt.includes('translate') || (systemInstruction || '').toLowerCase().includes('translator')) {
+      const targetLang = lowerPrompt.match(/(?:into|to|in)\s+([a-zA-Z]+)/i)?.[1] || 'Telugu';
+      const textToTr = prompt
+        .replace(/^[\s\S]*?(?:translate(?: the following text)?(?: into \w+)?[:\s"]+)/i, '')
+        .replace(/["']\s*$/, '')
+        .trim();
+      const localTr = this.localTranslation(textToTr || prompt, targetLang, providerName);
+      return Promise.resolve({
+        text: localTr.translatedText,
+        modelUsed: localTr.modelUsed,
       });
     }
 

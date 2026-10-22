@@ -4,6 +4,12 @@
 
 ---
 
+## 🌐 Live Production Deployment
+
+🚀 **Live URL**: **[https://p1tasker.vercel.app](https://p1tasker.vercel.app)**
+
+---
+
 ## 📚 Documentation & Guides
 
 - 📘 **[Complete User Guide (USAGE.md)](./USAGE.md)**: Step-by-step instructions for getting started, authentication, daily tasks, alarms, Word Document Canvas, voice typing in 15+ languages, AI error correction, and encrypted backups.

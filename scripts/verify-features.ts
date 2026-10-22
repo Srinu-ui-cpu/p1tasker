@@ -596,7 +596,7 @@ async function main() {
     state.folderId = undefined;
     StorageService.saveGoogleDriveState(state);
     const searchUrl = GoogleAuthService.getDriveFolderUrl();
-    assertEquals(searchUrl, 'https://drive.google.com/drive/search?q=Tasker', 'Fallback search URL');
+    assertEquals(searchUrl, 'https://drive.google.com/drive/u/0/my-drive', 'Fallback My Drive URL');
   });
 
   await runTest('GoogleAuthService', 'Multi-account linking, active switching, and sign out', () => {
