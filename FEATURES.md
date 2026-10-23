@@ -151,14 +151,15 @@ Tasker OS implements a flexible, zero-config AI broker architecture supporting m
 
 ---
 
-## 6. 📊 Audience & Regional Analytics Telemetry Engine
+## 6. 📊 Standalone Audience & Regional Analytics Engine (Zero Simulation)
 
-Tasker OS includes a built-in privacy-first telemetry engine (`AnalyticsService`) and an executive reporting dashboard (`AnalyticsDashboard.tsx`):
+Tasker OS includes a privacy-first telemetry engine (`AnalyticsService`) and a dedicated standalone executive reporting dashboard hosted separately at [`analytics.html`](./analytics.html) (deployed at `/analytics.html`):
 
-### 6.1 Privacy-First Principles
+### 6.1 Strictly Genuine Data & Privacy-First Principles
+- **Zero Simulation / No Mock Data**: Displays only genuine real visitors, authentic geolocated IP locations, actual devices (including Smart Watches), and real feature clicks. All legacy mock/baseline visitors have been completely purged.
 - **Strictly Anonymized**: No user task titles, diary entries, personal names, or cloud credentials are ever recorded or transmitted.
 - **Persistent Anonymous Visitor ID**: Generates a random UUID stored in local storage to track unique visitors over time.
-- **Session Tracking**: Tracks session durations, active browser heartbeats, and page views.
+- **Session Tracking**: Tracks real session durations, active browser heartbeats, and page views.
 
 ### 6.2 IP Geolocation & Zero-Latency Fallback
 - Resolves visitor geographic country, region/state, and city via a fast CORS-compliant IP geolocation service.
@@ -192,7 +193,12 @@ Tasker OS includes a built-in privacy-first telemetry engine (`AnalyticsService`
 - **Light Mode**: Crisp, executive paper-white backgrounds (`#f8fafc`, `#ffffff`), subtle borders (`#e2e8f0`), and high-contrast charcoal text (`#0f172a`).
 - Instant switching via the top navigation bar with zero page reload and localStorage persistence.
 
-### 8.2 Responsive Viewports & Multi-Device Breakpoints
-- **Mobile (375px - 640px)**: Horizontal scrollable navigation tabs, touch-friendly action targets, full-width modal drawers.
+### 8.2 Universal Responsive Viewports & Multi-Device Breakpoints
+- **Smartwatch & Ultra-Compact (180px - 280px)**:
+  - Custom media queries (`@media (max-width: 320px)`), compact icon buttons, micro-dot task priority indicators in calendar grid cells.
+  - Zero horizontal overflow (`overflow-x: hidden; max-width: 100vw`).
+  - Fluid flexbox layout for quick task creation bar (`flex-1 min-w-0 w-full`).
+  - Adjusted timeline gutter indentation (`ml-12`) for ultra-narrow screens.
+- **Mobile (320px - 640px)**: Horizontal scrollable navigation tabs, touch-friendly action targets (`min-h-[44px]`), full-width modal drawers.
 - **Tablet (768px - 1024px)**: Responsive 2-column dashboards and adaptive calendar grids.
 - **Desktop & 4K (1280px+)**: Multi-column Eisenhower matrix, full Word canvas, and maximum-width constraints (`max-w-7xl`).

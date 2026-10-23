@@ -32,14 +32,14 @@ Tasker OS provides a seamless, secure authentication flow connecting your person
 
 ## 2. 🧭 Navigating the Workspace
 
-The top navigation bar provides instant one-click switching across all 6 core modules:
+The top navigation bar provides instant one-click switching across the 5 core modules (with Analytics hosted separately at [`analytics.html`](./analytics.html)):
 
 - **📅 Calendar**: Monthly command center displaying daily task completion badges, mood markers, and scheduled items.
 - **📋 Day Tasks**: Daily priority execution with subtasks, inline media chips, and alarm chimes.
 - **⚡ Scheduler**: Eisenhower Matrix (Urgent vs. Important) with melodic Web Audio reminders.
 - **📖 Diary**: Word Document Canvas with sequential paragraphs, inline attachments, multilingual voice typing, and AI polishing.
 - **🔒 Backup & Sync**: One-click Google Drive sync, AES-256-GCM encrypted backup export/import (Merge vs Replace modes).
-- **📊 Analytics**: Real-time Audience & Regional Telemetry Dashboard tracking unique visitors, country/state breakdown, devices, and feature stats.
+- **📊 Analytics ([analytics.html](./analytics.html))**: Dedicated standalone real-time audience & regional telemetry dashboard tracking genuine unique visitors, country/state breakdown, devices (including smartwatches), and feature stats.
 - **☀️ / 🌙 Theme Toggle**: Instant switch between Deep Space Slate (Dark) and Crisp Executive Paper (Light).
 - **✨ Omni-AI Brain**: Slide-out multi-model assistant (Gemini, Groq, xAI Grok, OpenAI) with Mermaid mind maps and clickable `[YYYY-MM-DD]` date pills.
 - **🔍 Global Search (`Ctrl+K`)**: Universal full-text search across all your tasks, diary entries, and file attachments.
@@ -167,11 +167,12 @@ Under the **Backup & Sync** tab:
 
 ---
 
-## 10. 📱 Multi-Device & Mobile Tips
+## 10. 📱 Universal Multi-Device Compatibility (Smartwatch to Big PC 4K)
 
-- **Mobile Phones (375px+)**: The navigation bar supports smooth horizontal swiping across tabs. Modals and drawers adapt with touch-friendly controls.
-- **Tablets & Laptops**: Multi-column dashboards and adaptive Eisenhower grids.
-- **Desktop & 4K**: Fluid Word Document Canvas constrained to a comfortable reading width (`max-w-7xl`).
+- **Smart Watches (180px - 280px)**: Engineered with micro-dot calendar density badges, single-letter day abbreviations, stacked inputs, and touch-optimized controls with zero horizontal overflow.
+- **Mobile Phones (320px - 480px)**: The navigation bar supports smooth horizontal swiping across tabs. Modals and drawers adapt with touch-friendly controls (`min-h-[44px]`).
+- **Tablets & Laptops (768px - 1024px)**: Multi-column dashboards and adaptive Eisenhower grids.
+- **Desktop & 4K (1280px+)**: Fluid Word Document Canvas constrained to a comfortable reading width (`max-w-7xl`).
 - **Install as PWA**: Open Tasker OS in Chrome, Safari, or Edge and select **Install App** or **Add to Home Screen** for an offline-ready, app-like experience.
 
 👉 **[Start Using Tasker OS Live](https://p1tasker.vercel.app)**

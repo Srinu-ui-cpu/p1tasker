@@ -142,51 +142,51 @@ export const TeamsScheduleGrid: React.FC<TeamsScheduleGridProps> = ({
   };
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden p-6 max-w-5xl mx-auto">
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden p-2.5 sm:p-4 md:p-6 max-w-5xl mx-auto transition-colors duration-200">
       
       {/* Header */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-4 pb-4 border-b border-slate-800">
+      <div className="flex items-center justify-between mb-4 sm:mb-6 flex-wrap gap-2 sm:gap-4 pb-3 sm:pb-4 border-b border-slate-800">
         <div>
           <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-indigo-950 text-indigo-400 border border-indigo-800/60">
-              <Clock className="w-5 h-5" />
+            <span className="p-1.5 rounded-lg bg-indigo-950 text-indigo-400 border border-indigo-800/60 shrink-0">
+              <Clock className="w-4 h-4 sm:w-5 sm:h-5" />
             </span>
-            <h2 className="text-xl font-extrabold text-white">Teams-Style Schedule Planner</h2>
+            <h2 className="text-lg sm:text-xl font-extrabold text-white">Teams Schedule Planner</h2>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
-            Visual day timeline for <span className="font-semibold text-slate-200">{format(parseISO(currentDate), 'EEEE, MMMM d, yyyy')}</span> with automated 15m & 5m prior alarms. Click any slot or task card to adjust!
+          <p className="text-[10px] sm:text-xs text-slate-400 mt-1">
+            Visual day timeline for <span className="font-semibold text-slate-200">{format(parseISO(currentDate), 'EEEE, MMMM d')}</span> with 15m & 5m prior alarms.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
           <button
             onClick={handleTriggerTestAlarm}
-            className="flex items-center gap-1.5 px-3 py-2 bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/60 rounded-xl text-xs font-bold transition shadow-sm"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-700/60 rounded-xl text-xs font-bold transition shadow-sm"
             title="Immediately trigger test chime and takeover alert"
           >
-            <BellRing className="w-4 h-4 text-amber-400" />
-            <span>Test Alarm</span>
+            <BellRing className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" />
+            <span className="hidden xs:inline">Test Alarm</span>
           </button>
 
           <button
             onClick={() => handleOpenCreateModal('09:00', '10:00')}
-            className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/30"
+            className="flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 sm:py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-indigo-600/30"
           >
-            <Plus className="w-4 h-4" />
-            <span>Schedule Time Slot</span>
+            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span>Schedule Slot</span>
           </button>
 
           <button
             onClick={onOpenDiary}
-            className="flex items-center gap-1.5 px-3 py-2 bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-800/60 rounded-xl text-xs font-semibold transition"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 bg-purple-950/80 hover:bg-purple-900 text-purple-300 border border-purple-800/60 rounded-xl text-xs font-semibold transition"
           >
-            <span>📔 Day Diary</span>
+            <span>📔 Diary</span>
           </button>
         </div>
       </div>
 
       {/* Grid Timeline */}
-      <div className="relative border-l border-slate-800 ml-16 space-y-4 py-2">
+      <div className="relative border-l border-slate-800 ml-12 sm:ml-16 space-y-3 sm:space-y-4 py-2">
         {hours.map(hour => {
           const timeString = `${hour.toString().padStart(2, '0')}:00`;
           const nextTimeString = `${(hour + 1).toString().padStart(2, '0')}:00`;
@@ -200,9 +200,9 @@ export const TeamsScheduleGrid: React.FC<TeamsScheduleGridProps> = ({
           });
 
           return (
-            <div key={hour} className="relative group min-h-[64px] border-b border-slate-800/40 pb-3">
+            <div key={hour} className="relative group min-h-[56px] sm:min-h-[64px] border-b border-slate-800/40 pb-2.5 sm:pb-3">
               {/* Left Hour Label */}
-              <div className="absolute -left-16 -top-2.5 w-14 text-right pr-2 text-xs font-mono font-medium text-slate-500">
+              <div className="absolute -left-12 sm:-left-16 -top-2.5 w-10 sm:w-14 text-right pr-1 sm:pr-2 text-[10px] sm:text-xs font-mono font-medium text-slate-500">
                 {displayLabel}
               </div>
 
@@ -210,7 +210,7 @@ export const TeamsScheduleGrid: React.FC<TeamsScheduleGridProps> = ({
               <div className="absolute -left-[5px] top-0 w-2.5 h-2.5 rounded-full bg-slate-800 border-2 border-slate-900 group-hover:bg-indigo-500 transition" />
 
               {/* Tasks within this slot */}
-              <div className="pl-4 space-y-2">
+              <div className="pl-2 sm:pl-4 space-y-2">
                 {hourTasks.length === 0 ? (
                   <div 
                     onClick={() => handleOpenCreateModal(timeString, nextTimeString)}

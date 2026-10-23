@@ -21,12 +21,14 @@ export interface VisitorSession {
   lastActive: number;
   durationSeconds: number;
   location: VisitorLocation;
-  deviceType: 'Desktop' | 'Mobile' | 'Tablet';
+  deviceType: 'Desktop' | 'Mobile' | 'Tablet' | 'Smart Watch';
   browser: string;
   os: string;
   referrer: string;
   pageViews: number;
   eventsCount: number;
+  screenWidth?: number;
+  screenHeight?: number;
 }
 
 export interface TelemetryEvent {
@@ -150,11 +152,14 @@ export class AnalyticsService {
     const visitorId = this.getOrCreateVisitorId();
     const sessionId = this.getOrCreateSessionId();
 
-    // Gather device metadata
+    // Gather device metadata & viewport metrics
     const ua = navigator.userAgent || '';
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua);
-    const isTablet = /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk)/i.test(ua);
-    const deviceType: 'Desktop' | 'Mobile' | 'Tablet' = isTablet ? 'Tablet' : isMobile ? 'Mobile' : 'Desktop';
+    const screenWidth = typeof window !== 'undefined' ? (window.innerWidth || (typeof screen !== 'undefined' ? screen.width : 1024)) : 1024;
+    const screenHeight = typeof window !== 'undefined' ? (window.innerHeight || (typeof screen !== 'undefined' ? screen.height : 768)) : 768;
+    const isWatch = screenWidth > 0 && screenWidth <= 280;
+    const isTablet = !isWatch && /(ipad|tablet|(android(?!.*mobile))|(windows(?!.*phone)(.*touch))|kindle|playbook|silk)/i.test(ua);
+    const isMobile = !isWatch && !isTablet && (/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(ua) || screenWidth <= 480);
+    const deviceType: 'Desktop' | 'Mobile' | 'Tablet' | 'Smart Watch' = isWatch ? 'Smart Watch' : isTablet ? 'Tablet' : isMobile ? 'Mobile' : 'Desktop';
 
     let browser = 'Chrome';
     if (ua.includes('Firefox')) browser = 'Firefox';
@@ -186,6 +191,8 @@ export class AnalyticsService {
       referrer: (typeof document !== 'undefined' && document?.referrer) ? new URL(document.referrer).hostname : 'Direct / Bookmark',
       pageViews: 1,
       eventsCount: 1,
+      screenWidth,
+      screenHeight,
     };
 
     // Save initial session
@@ -430,7 +437,26 @@ export class AnalyticsService {
       if (typeof localStorage === 'undefined') return this.createInitialData();
       const raw = localStorage.getItem(STORAGE_KEYS.ANALYTICS);
       if (raw) {
-        return JSON.parse(raw);
+        const parsed = JSON.parse(raw);
+        // Cleanse any legacy simulated mock sessions so only real genuine data remains
+        if (parsed.recentVisitors && Array.isArray(parsed.recentVisitors)) {
+          const cleaned = parsed.recentVisitors.filter((v: any) => !v.id?.startsWith('sess-init-') && !v.visitorId?.startsWith('vid-init-'));
+          if (cleaned.length !== parsed.recentVisitors.length) {
+            parsed.recentVisitors = cleaned;
+            parsed.totalVisits = cleaned.length;
+            parsed.uniqueVisitors = new Set(cleaned.map((v: any) => v.visitorId)).size;
+            if (cleaned.length === 0) {
+              parsed.featureUsage = { tasksCreated: 0, tasksCompleted: 0, diaryEntries: 0, filesUploaded: 0, aiQueries: 0, voiceMinutes: 0 };
+              parsed.recentActivity = [];
+              parsed.deviceBreakdown = {};
+              parsed.browserBreakdown = {};
+              parsed.osBreakdown = {};
+              parsed.regionalBreakdown = [];
+            }
+            this.saveStoredData(parsed);
+          }
+        }
+        return parsed;
       }
     } catch {
       // Fallback
@@ -451,114 +477,30 @@ export class AnalyticsService {
   }
 
   /**
-   * Baseline initial data with rich global distribution to give instant insights
+   * Initial zero-state data with ZERO simulation or fake entries.
+   * Only real visitors and real actions will be recorded and shown.
    */
   private static createInitialData(): AnalyticsSummary {
-    const baselineVisitors: VisitorSession[] = [
-      {
-        id: 'sess-init-1',
-        visitorId: 'vid-init-1',
-        startTime: Date.now() - 42 * 60 * 1000,
-        lastActive: Date.now() - 2 * 60 * 1000,
-        durationSeconds: 1420,
-        location: { country: 'India', countryCode: 'IN', region: 'Telangana', city: 'Hyderabad', timezone: 'Asia/Kolkata', flag: '🇮🇳' },
-        deviceType: 'Desktop',
-        browser: 'Chrome',
-        os: 'Windows',
-        referrer: 'Direct / Bookmark',
-        pageViews: 14,
-        eventsCount: 32,
-      },
-      {
-        id: 'sess-init-2',
-        visitorId: 'vid-init-2',
-        startTime: Date.now() - 120 * 60 * 1000,
-        lastActive: Date.now() - 15 * 60 * 1000,
-        durationSeconds: 840,
-        location: { country: 'United States', countryCode: 'US', region: 'California', city: 'San Francisco', timezone: 'America/Los_Angeles', flag: '🇺🇸' },
-        deviceType: 'Desktop',
-        browser: 'Chrome',
-        os: 'macOS',
-        referrer: 'github.com',
-        pageViews: 8,
-        eventsCount: 19,
-      },
-      {
-        id: 'sess-init-3',
-        visitorId: 'vid-init-3',
-        startTime: Date.now() - 240 * 60 * 1000,
-        lastActive: Date.now() - 40 * 60 * 1000,
-        durationSeconds: 610,
-        location: { country: 'United Kingdom', countryCode: 'GB', region: 'England', city: 'London', timezone: 'Europe/London', flag: '🇬🇧' },
-        deviceType: 'Mobile',
-        browser: 'Safari',
-        os: 'iOS',
-        referrer: 'p1tasker.vercel.app',
-        pageViews: 5,
-        eventsCount: 12,
-      },
-      {
-        id: 'sess-init-4',
-        visitorId: 'vid-init-4',
-        startTime: Date.now() - 360 * 60 * 1000,
-        lastActive: Date.now() - 95 * 60 * 1000,
-        durationSeconds: 490,
-        location: { country: 'Germany', countryCode: 'DE', region: 'Bavaria', city: 'Munich', timezone: 'Europe/Berlin', flag: '🇩🇪' },
-        deviceType: 'Desktop',
-        browser: 'Firefox',
-        os: 'Linux',
-        referrer: 'Direct',
-        pageViews: 6,
-        eventsCount: 15,
-      },
-      {
-        id: 'sess-init-5',
-        visitorId: 'vid-init-5',
-        startTime: Date.now() - 500 * 60 * 1000,
-        lastActive: Date.now() - 120 * 60 * 1000,
-        durationSeconds: 380,
-        location: { country: 'Japan', countryCode: 'JP', region: 'Kanto', city: 'Tokyo', timezone: 'Asia/Tokyo', flag: '🇯🇵' },
-        deviceType: 'Desktop',
-        browser: 'Edge',
-        os: 'Windows',
-        referrer: 'google.com',
-        pageViews: 4,
-        eventsCount: 8,
-      },
-    ];
-
     return {
-      totalVisits: 148,
-      uniqueVisitors: 42,
-      activeNow: 3,
-      avgSessionSeconds: 520,
-      currentVisitor: baselineVisitors[0],
-      recentVisitors: baselineVisitors,
-      regionalBreakdown: [
-        { country: 'India', countryCode: 'IN', region: 'Telangana', city: 'Hyderabad', flag: '🇮🇳', visitors: 19, percentage: 45 },
-        { country: 'United States', countryCode: 'US', region: 'California', city: 'San Francisco', flag: '🇺🇸', visitors: 12, percentage: 28 },
-        { country: 'United Kingdom', countryCode: 'GB', region: 'England', city: 'London', flag: '🇬🇧', visitors: 6, percentage: 14 },
-        { country: 'Germany', countryCode: 'DE', region: 'Bavaria', city: 'Munich', flag: '🇩🇪', visitors: 3, percentage: 7 },
-        { country: 'Japan', countryCode: 'JP', region: 'Kanto', city: 'Tokyo', flag: '🇯🇵', visitors: 2, percentage: 6 },
-      ],
-      deviceBreakdown: { Desktop: 34, Mobile: 7, Tablet: 1 },
-      browserBreakdown: { Chrome: 28, Safari: 7, Edge: 4, Firefox: 3 },
-      osBreakdown: { Windows: 26, macOS: 10, iOS: 4, Android: 2 },
+      totalVisits: 0,
+      uniqueVisitors: 0,
+      activeNow: 0,
+      avgSessionSeconds: 0,
+      currentVisitor: null as any,
+      recentVisitors: [],
+      regionalBreakdown: [],
+      deviceBreakdown: {},
+      browserBreakdown: {},
+      osBreakdown: {},
       featureUsage: {
-        tasksCreated: 87,
-        tasksCompleted: 64,
-        diaryEntries: 29,
-        filesUploaded: 18,
-        aiQueries: 142,
-        voiceMinutes: 46,
+        tasksCreated: 0,
+        tasksCompleted: 0,
+        diaryEntries: 0,
+        filesUploaded: 0,
+        aiQueries: 0,
+        voiceMinutes: 0,
       },
-      recentActivity: [
-        { id: 'act-1', timestamp: '12:45 PM', type: 'page_view', label: 'Visitor from Hyderabad, India accessed Calendar View', region: 'India' },
-        { id: 'act-2', timestamp: '12:30 PM', type: 'task_created', label: 'Created urgent task: "Deploy production release"', region: 'India' },
-        { id: 'act-3', timestamp: '11:58 AM', type: 'ai_query', label: 'Omni-AI query: "Summarize sprint accomplishments"', region: 'United States' },
-        { id: 'act-4', timestamp: '11:20 AM', type: 'voice_dictation', label: 'Multilingual speech dictation session (Telugu)', region: 'India' },
-        { id: 'act-5', timestamp: '10:40 AM', type: 'file_uploaded', label: 'Uploaded media to Google Drive: "Project_Roadmap.pdf"', region: 'United Kingdom' },
-      ],
+      recentActivity: [],
     };
   }
 }

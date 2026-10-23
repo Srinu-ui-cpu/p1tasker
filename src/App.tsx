@@ -25,7 +25,6 @@ import { TaskItem, GoogleDriveState, AIProvider } from './types';
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { TermsOfServiceView } from './components/TermsOfServiceView';
 import { AttachGoogleModal } from './components/AttachGoogleModal';
-import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 
 export function App() {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -47,7 +46,7 @@ export function App() {
   });
   const [currentDate, setCurrentDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   // Calendar appears first after Google authentication
-  const [activeTab, setActiveTab] = useState<'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup' | 'analytics'>('calendar');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup'>('calendar');
   const [tasks, setTasks] = useState<TaskItem[]>(() => StorageService.getTasksForDate(currentDate));
 
   // Modals & Drawers
@@ -91,9 +90,9 @@ export function App() {
     };
   }, []);
 
-  const handleDateSelect = (date: string, tab: 'tasks' | 'diary' | 'scheduler' | 'calendar' | 'backup' | 'analytics' = 'tasks') => {
+  const handleDateSelect = (date: string, tab: 'tasks' | 'diary' | 'scheduler' | 'calendar' | 'backup' = 'tasks') => {
     setCurrentDate(date);
-    setActiveTab(tab as 'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup' | 'analytics');
+    setActiveTab(tab as 'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup');
   };
 
   // If user is not authenticated with Google, show Landing Page or Clean Login Page
@@ -172,7 +171,7 @@ export function App() {
       )}
 
       {/* Main View Area: Calendar First, Date Workspace on Click, Full Diary View */}
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-2 sm:p-4 md:p-6 lg:p-8 max-w-7xl mx-auto w-full">
         {activeTab === 'calendar' && (
           <CalendarView
             selectedDate={currentDate}
@@ -215,10 +214,6 @@ export function App() {
           <BackupRestoreView
             onDataRestored={refreshTasks}
           />
-        )}
-
-        {activeTab === 'analytics' && (
-          <AnalyticsDashboard />
         )}
       </main>
 

@@ -50,55 +50,56 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const weekHeaders = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden p-6 max-w-5xl mx-auto">
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl overflow-hidden p-2.5 sm:p-4 md:p-6 max-w-5xl mx-auto transition-colors duration-200">
       
       {/* Calendar Header */}
-      <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+      <div className="flex items-center justify-between mb-3 sm:mb-6 flex-wrap gap-2 sm:gap-4">
         <div>
-          <h2 className="text-2xl font-extrabold text-white tracking-tight flex items-center gap-2">
-            <CalendarIcon className="w-6 h-6 text-indigo-400" />
+          <h2 className="text-lg sm:text-2xl font-extrabold text-white tracking-tight flex items-center gap-1.5 sm:gap-2">
+            <CalendarIcon className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-400 shrink-0" />
             <span>{format(currentMonth, 'MMMM yyyy')}</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">Click any date to open its task workspace and daily diary.</p>
+          <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">Click any date to open its task workspace and daily diary.</p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
           <button
             onClick={goToToday}
-            className="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg border border-slate-700 transition"
+            className="px-2.5 py-1 sm:px-3 sm:py-1.5 text-[11px] sm:text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg border border-slate-700 transition"
           >
             Today
           </button>
-          <div className="flex items-center bg-slate-800/80 rounded-lg p-1 border border-slate-700/60">
+          <div className="flex items-center bg-slate-800/80 rounded-lg p-0.5 sm:p-1 border border-slate-700/60">
             <button
               onClick={prevMonth}
               className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded transition"
               title="Previous Month"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
             <button
               onClick={nextMonth}
               className="p-1 hover:bg-slate-700 text-slate-300 hover:text-white rounded transition"
               title="Next Month"
             >
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Weekday Labels */}
-      <div className="grid grid-cols-7 gap-2 mb-2">
+      {/* Weekday Labels (Abbreviated on Mobile) */}
+      <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-1 sm:mb-2">
         {weekHeaders.map(day => (
-          <div key={day} className="text-center text-xs font-bold text-slate-400 uppercase tracking-wider py-1">
-            {day}
+          <div key={day} className="text-center text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-wider py-1">
+            <span className="hidden sm:inline">{day}</span>
+            <span className="inline sm:hidden">{day.charAt(0)}</span>
           </div>
         ))}
       </div>
 
       {/* Days Grid */}
-      <div className="grid grid-cols-7 gap-2">
+      <div className="grid grid-cols-7 gap-1 sm:gap-2">
         {calendarDays.map((day) => {
           const dateStr = format(day, 'yyyy-MM-dd');
           const isSelected = dateStr === selectedDate;
@@ -117,7 +118,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 onSelectDate(dateStr);
                 onOpenDayWorkspace(dateStr);
               }}
-              className={`min-h-[96px] p-2 rounded-xl border transition cursor-pointer flex flex-col justify-between group relative ${
+              className={`min-h-[50px] sm:min-h-[76px] md:min-h-[96px] p-1 sm:p-2 rounded-xl border transition cursor-pointer flex flex-col justify-between group relative ${
                 isSelected 
                   ? 'border-indigo-500 bg-indigo-950/40 shadow-lg shadow-indigo-500/10' 
                   : isCurrentMonthDay
@@ -127,32 +128,53 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             >
               {/* Day Number and Badges */}
               <div className="flex items-center justify-between">
-                <span className={`text-xs font-bold w-6 h-6 rounded-full flex items-center justify-center ${
+                <span className={`text-[10px] sm:text-xs font-bold w-5 h-5 sm:w-6 sm:h-6 rounded-full flex items-center justify-center shrink-0 ${
                   isToday 
                     ? 'bg-indigo-600 text-white font-extrabold shadow' 
                     : isSelected 
-                    ? 'text-indigo-400' 
+                    ? 'text-indigo-400 font-bold' 
                     : 'text-slate-300'
                 }`}>
                   {format(day, 'd')}
                 </span>
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-0.5 sm:gap-1">
                   {/* Diary Bookmark indicator */}
                   {hasDiary && (
                     <span title="Diary entry recorded" className="text-purple-400 bg-purple-950/80 p-0.5 rounded border border-purple-800/60">
-                      <BookOpen className="w-3 h-3" />
+                      <BookOpen className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                     </span>
                   )}
                   {/* Urgent task dot */}
                   {hasUrgent && (
-                    <span className="w-2 h-2 rounded-full bg-rose-500 ring-2 ring-rose-500/20 animate-pulse" title="High / Urgent task" />
+                    <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full bg-rose-500 ring-1 sm:ring-2 ring-rose-500/20 animate-pulse" title="High / Urgent task" />
                   )}
                 </div>
               </div>
 
-              {/* Day Tasks Summary */}
-              <div className="mt-1 space-y-1">
+              {/* Mobile Micro Dots for Tasks (< sm) */}
+              <div className="flex sm:hidden items-center justify-center gap-0.5 mt-0.5 flex-wrap">
+                {dayTasks.slice(0, 3).map((task) => (
+                  <span
+                    key={task.id}
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      task.status === 'completed'
+                        ? 'bg-emerald-400'
+                        : task.priority === 'urgent'
+                        ? 'bg-rose-500'
+                        : task.priority === 'high'
+                        ? 'bg-amber-400'
+                        : 'bg-indigo-400'
+                    }`}
+                  />
+                ))}
+                {dayTasks.length > 3 && (
+                  <span className="text-[7px] text-slate-400 font-bold leading-none">+</span>
+                )}
+              </div>
+
+              {/* Day Tasks Summary (>= sm) */}
+              <div className="mt-1 space-y-1 hidden sm:block">
                 {dayTasks.slice(0, 2).map(task => (
                   <div
                     key={task.id}
@@ -179,7 +201,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
 
               {/* Bottom Quick Indicator */}
               {dayTasks.length > 0 && (
-                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/60">
+                <div className="hidden sm:flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/60">
                   <span className="flex items-center gap-1">
                     <CheckSquare className="w-2.5 h-2.5 text-indigo-400" />
                     <span>{completedCount}/{dayTasks.length}</span>
@@ -195,24 +217,24 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       </div>
 
       {/* Legend Footer */}
-      <div className="mt-6 pt-4 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400 flex-wrap gap-3">
-        <div className="flex items-center gap-4">
+      <div className="mt-4 sm:mt-6 pt-3 sm:pt-4 border-t border-slate-800 flex items-center justify-between text-[11px] sm:text-xs text-slate-400 flex-wrap gap-2 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-4 flex-wrap">
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-            <span>Urgent / High Priority</span>
+            <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-rose-500" />
+            <span>High Priority</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="p-0.5 rounded bg-purple-950 text-purple-400 border border-purple-800/60">
-              <BookOpen className="w-3 h-3" />
+              <BookOpen className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
             </span>
-            <span>Diary Entry Present</span>
+            <span>Diary</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-indigo-600" />
+            <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full bg-indigo-600" />
             <span>Today</span>
           </div>
         </div>
-        <span className="text-slate-500">Double click any day to open Tasker workspace</span>
+        <span className="text-slate-500 hidden sm:inline">Click any day to open Day Workspace</span>
       </div>
 
     </div>

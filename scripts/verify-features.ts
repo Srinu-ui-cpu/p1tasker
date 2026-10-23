@@ -2121,6 +2121,63 @@ Translation: ఈరోజు నా పని పూర్తయింది.`;
     assert(readContent.includes('NAVIGATION.md'), 'README.md must link to NAVIGATION.md');
   });
 
+  await runTest('StandaloneZeroSimulationAnalyticsVerification', 'Verifies analytics.html is hosted separately, contains 0 simulated records, and has real detection', () => {
+    const rootAnalytics = path.resolve(process.cwd(), 'analytics.html');
+    const pubAnalytics = path.resolve(process.cwd(), 'public', 'analytics.html');
+
+    assert(fs.existsSync(rootAnalytics), 'analytics.html must exist in project root for GitHub repository');
+    assert(fs.existsSync(pubAnalytics), 'analytics.html must exist in public/ for web serving');
+
+    const content = fs.readFileSync(rootAnalytics, 'utf8');
+    assert(!content.includes('sess-init-1'), 'analytics.html must NOT contain simulated mock sessions');
+    assert(!content.includes('Tokyo'), 'analytics.html must NOT contain hardcoded fake Tokyo visitors');
+    assert(!content.includes('San Francisco'), 'analytics.html must NOT contain hardcoded fake SF visitors');
+    assert(content.includes('fetchRealIpData'), 'analytics.html must include real IP fetch function');
+    assert(content.includes('Smart Watch'), 'analytics.html must include smartwatch device detection');
+    assert(content.includes('100% Genuine Telemetry') || content.includes('Zero simulated data'), 'analytics.html must have strict zero-simulation indicator');
+  });
+
+  await runTest('MainAppTabsSanityCheck', 'Verifies main web application has removed analytics tab and maintains only 5 core productivity tabs', () => {
+    const appPath = path.resolve(process.cwd(), 'src', 'App.tsx');
+    const navPath = path.resolve(process.cwd(), 'src', 'components', 'Navbar.tsx');
+
+    const appContent = fs.readFileSync(appPath, 'utf8');
+    const navContent = fs.readFileSync(navPath, 'utf8');
+
+    // Confirm no AnalyticsDashboard in App.tsx
+    assert(!appContent.includes('<AnalyticsDashboard'), 'App.tsx must not render AnalyticsDashboard component');
+    assert(!appContent.includes("activeTab === 'analytics'"), 'App.tsx activeTab must not contain analytics');
+
+    // Confirm Navbar.tsx does not have analytics tab button
+    assert(!navContent.includes("id: 'analytics'"), 'Navbar.tsx must not have an analytics navigation tab item');
+    assert(!navContent.includes("activeTab === 'analytics'"), 'Navbar.tsx must not evaluate activeTab === analytics');
+  });
+
+  await runTest('UniversalResponsiveDesignVerification', 'Verifies responsive CSS rules and components support smartwatches (180px) to 4K displays', () => {
+    const cssPath = path.resolve(process.cwd(), 'src', 'index.css');
+    const dayWsPath = path.resolve(process.cwd(), 'src', 'components', 'DayWorkspace.tsx');
+    const calPath = path.resolve(process.cwd(), 'src', 'components', 'CalendarView.tsx');
+    const schedPath = path.resolve(process.cwd(), 'src', 'components', 'TeamsScheduleGrid.tsx');
+
+    const cssContent = fs.readFileSync(cssPath, 'utf8');
+    const dayWsContent = fs.readFileSync(dayWsPath, 'utf8');
+    const calContent = fs.readFileSync(calPath, 'utf8');
+    const schedContent = fs.readFileSync(schedPath, 'utf8');
+
+    // Check index.css
+    assert(cssContent.includes('max-width: 320px'), 'index.css must contain smartwatch / ultra-compact media queries');
+    assert(cssContent.includes('overflow-x: hidden'), 'index.css must enforce overflow-x hidden for universal responsiveness');
+
+    // Check DayWorkspace.tsx
+    assert(dayWsContent.includes('min-w-0 flex-1'), 'DayWorkspace input must have fluid min-w-0 flex-1 layout');
+
+    // Check CalendarView.tsx
+    assert(calContent.includes('sm:hidden'), 'CalendarView must render responsive micro-dots for small screens');
+
+    // Check TeamsScheduleGrid.tsx
+    assert(schedContent.includes('ml-12 sm:ml-16'), 'TeamsScheduleGrid must have responsive indentation for smartwatches');
+  });
+
   await runTest('WorkspacePristineDataPurge', 'Cleanly purges all test and dummy entries so the workspace is completely pristine', () => {
     // 1. Purge storage service data
     StorageService.saveTasks([]);

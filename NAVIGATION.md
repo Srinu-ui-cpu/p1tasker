@@ -2,7 +2,8 @@
 
 > A comprehensive navigational blueprint and visual walkthrough of **Tasker OS**. Explore all application views, navigation controls, modal workflows, quick actions, and keyboard shortcuts designed for maximum executive efficiency.
 
-🚀 **Explore the Live Web App**: **[https://p1tasker.vercel.app](https://p1tasker.vercel.app)**
+🚀 **Explore the Live Web App**: **[https://p1tasker.vercel.app](https://p1tasker.vercel.app)**  
+📊 **Real-Time Analytics Dashboard**: **[https://p1tasker.vercel.app/analytics.html](https://p1tasker.vercel.app/analytics.html)** (Hosted separately in repo: [`analytics.html`](./analytics.html))
 
 ---
 
@@ -32,7 +33,7 @@ The top navigation bar is persistent across all views, providing rapid switching
 | :--- | :--- | :--- |
 | **Brand Logo & Title** | Left | Click anytime to quickly jump back to the **Calendar View** or default to today's date. |
 | **Date Navigator** | Center-Left | Displays currently selected date (`YYYY-MM-DD`), with `◀ Prev` and `Next ▶` day buttons, plus a quick **"Today"** shortcut badge. |
-| **View Tabs (6 Modes)** | Center | Switch effortlessly between: `Calendar`, `Tasks`, `Scheduler`, `Diary`, `Backup`, and `Analytics`. |
+| **View Tabs (5 Core Modes)** | Center | Switch effortlessly between: `Calendar`, `Tasks`, `Scheduler`, `Diary`, and `Backup`. |
 | **Theme Toggle (☀️ / 🌙)** | Right | Instant switch between **Deep Slate Dark Mode** and **Crisp Executive Light Mode** with zero page reload. |
 | **Global Search (`Ctrl+K`)** | Right | Opens universal search across all tasks, diary notes, and file attachments with instant fuzzy matching. |
 | **Omni-AI Chatbot (`✨`)** | Right | Launches the slide-out AI assistant with full cross-date context, Mermaid mind maps, and clickable date pills. |
@@ -131,29 +132,50 @@ The top navigation bar is persistent across all views, providing rapid switching
 
 ---
 
-### 6. 📊 Audience & Regional Analytics Dashboard (`activeTab === 'analytics'`)
-*Real-time executive telemetry for website visitors, geography, and feature metrics.*
+### 6. 📊 Standalone Real-Time Audience Analytics Dashboard ([analytics.html](./analytics.html))
+*Dedicated executive analytics hosted separately in the GitHub repository and deployed at `/analytics.html`.*
 
+- **Strictly Real Data (Zero Simulation)**:
+  - 100% genuine visitors, real IP geolocation, real device identification, and actual real feature clicks.
+  - Zero simulated users, zero mock countries, and zero synthetic baseline numbers.
 - **KPI Metric Banner**:
-  - **Total Visits**: All page sessions recorded.
+  - **Total Visits**: All genuine page sessions recorded.
   - **Unique Visitors**: Distinct anonymous user IDs.
   - **Active Now**: Live active browser sessions.
   - **Avg Duration**: Mean engagement time in minutes and seconds.
 - **Interactive Geographic Distribution Table**:
   - Detected visitor country, state/region, city, and timezone.
-  - Country flag emoji (e.g. 🇮🇳 India, 🇺🇸 United States, 🇬🇧 United Kingdom, 🇩🇪 Germany).
+  - Country flag emojis (e.g. 🇮🇳 India, 🇺🇸 United States, 🇬🇧 United Kingdom, 🇩🇪 Germany).
   - Visual animated percentage progress bars showing geographic traffic share.
 - **Current Live Session Inspector**:
-  - Inspects your live IP geolocation, device type (Desktop, Mobile, Tablet), browser, operating system, and referrer source.
+  - Inspects your live IP geolocation, device type (Smart Watch, Mobile, Tablet, Desktop), browser, operating system, and referrer source.
 - **Technology & Platform Breakdown**:
-  - Real-time distribution graphs for Operating Systems (Windows, macOS, Linux, Android, iOS) and Browsers (Chrome, Firefox, Edge, Safari).
+  - Real-time distribution graphs for Operating Systems and Browsers.
 - **Feature Engagement Metrics**:
   - Live counters for Tasks Created, Tasks Completed, Diary Notes Written, Files Uploaded, AI Queries Executed, and Voice Dictation Minutes.
-- **Live Activity Stream**:
-  - Real-time streaming log of user actions across the app (task creations, diary updates, cloud syncs).
-- **One-Click Export**:
-  - **Export CSV**: Download regional visitor spreadsheets for external marketing reports.
-  - **Export JSON**: Download comprehensive telemetry payloads for analytics pipelines.
+- **Live Activity Stream & One-Click Export**:
+  - Streaming ticker of genuine user actions.
+  - **Export CSV**: Download regional visitor spreadsheets.
+  - **Export JSON**: Download complete telemetry payloads.
+
+---
+
+### 7. ⌚ Universal Viewport Responsiveness (Smartwatch to Big PC 4K)
+*Every view, modal, button, and canvas element is engineered to render cleanly on any display.*
+
+- **⌚ Smart Watch (180px - 280px)**:
+  - Compact icon buttons and minimized paddings (`p-1.5` to `p-2.5`).
+  - Calendar switches to single-letter days (`M, T, W...`) and renders colored micro-dots rather than truncated text.
+  - Quick-add task inputs collapse gracefully with `flex-1 min-w-0 w-full` to prevent horizontal clipping.
+  - Time schedule grid adjusts gutter indentation to 48px (`ml-12`) so hours never overflow.
+- **📱 Compact Mobile (320px - 480px)**:
+  - Header date stepper condenses to `MMM d` (e.g. `Oct 23`).
+  - Google account pill collapses long email strings while keeping the avatar and online indicator dot.
+  - Touch target heights meet WCAG AAA standards (`min-h-[44px]`).
+- **💻 Tablets & Laptops (768px - 1024px)**:
+  - Balanced multi-column layouts for Eisenhower matrix quadrants and task priority lists.
+- **🖥️ Desktop & 4K Workstations (1280px+)**:
+  - Generous typography, maximum reading width constraint (`max-w-7xl`), and full multi-column dashboard expansion.
 
 ---
 

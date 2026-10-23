@@ -78,58 +78,46 @@ export const DriveMediaViewerModal: React.FC<DriveMediaViewerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-fade-in">
-      <div className="max-w-4xl w-full bg-slate-900 border border-slate-700/80 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-slate-950/85 backdrop-blur-md animate-fade-in">
+      <div className="max-w-4xl w-[98vw] sm:w-full bg-slate-900 border border-slate-700/80 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[96vh] sm:max-h-[90vh]">
         
         {/* Top Header */}
-        <div className="p-4 sm:p-5 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="p-2.5 rounded-xl bg-indigo-950 text-indigo-400 border border-indigo-800/80 shrink-0">
-              {isImage ? <Cloud className="w-5 h-5" /> : <FileText className="w-5 h-5" />}
+        <div className="p-3 sm:p-5 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between gap-2 sm:gap-3 flex-wrap">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-indigo-950 text-indigo-400 border border-indigo-800/80 shrink-0">
+              {isImage ? <Cloud className="w-4 h-4 sm:w-5 sm:h-5" /> : <FileText className="w-4 h-4 sm:w-5 sm:h-5" />}
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="font-bold text-sm sm:text-base text-white truncate max-w-sm" title={attachment.name}>
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <h3 className="font-bold text-xs sm:text-base text-white truncate max-w-[180px] sm:max-w-sm" title={attachment.name}>
                   {attachment.name}
                 </h3>
                 {attachment.isUpdated && (
-                  <span className="px-2 py-0.5 rounded-md bg-indigo-950 border border-indigo-700 text-indigo-300 text-[10px] font-bold">
-                    Version {attachment.version || 2} (Updated)
+                  <span className="px-1.5 py-0.5 rounded-md bg-indigo-950 border border-indigo-700 text-indigo-300 text-[9px] sm:text-[10px] font-bold">
+                    v{attachment.version || 2}
                   </span>
                 )}
                 {attachment.supersededBy && (
-                  <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400 text-[10px] font-medium">
-                    Previous Version
+                  <span className="px-1.5 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400 text-[9px] sm:text-[10px] font-medium">
+                    Old Rev
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono mt-0.5 flex-wrap">
+              <div className="flex items-center gap-1.5 text-[9px] sm:text-[10px] text-slate-400 font-mono mt-0.5 flex-wrap">
                 <span>{attachment.size > 1024 * 1024 ? `${(attachment.size / (1024 * 1024)).toFixed(1)} MB` : `${(attachment.size / 1024).toFixed(1)} KB`}</span>
                 <span>&bull;</span>
                 <span className="uppercase">{attachment.type.split('/')[1] || 'FILE'}</span>
-                {attachment.updatedFromName && (
-                  <>
-                    <span>&bull;</span>
-                    <span className="text-indigo-400">Update of: {attachment.updatedFromName}</span>
-                  </>
-                )}
-                {date && (
-                  <>
-                    <span>&bull;</span>
-                    <span>Journal: {date}</span>
-                  </>
-                )}
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {hasValidDriveId && driveFileUrl ? (
               <a
                 href={driveFileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm"
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm"
                 title="Open file directly in Google Drive"
               >
                 <Cloud className="w-3.5 h-3.5" />
@@ -141,7 +129,7 @@ export const DriveMediaViewerModal: React.FC<DriveMediaViewerModalProps> = ({
                 type="button"
                 onClick={handleTriggerRetry}
                 disabled={retrying}
-                className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm cursor-pointer"
+                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-1.5 transition shadow-sm cursor-pointer"
                 title="Upload file to Google Drive"
               >
                 {retrying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
@@ -151,30 +139,30 @@ export const DriveMediaViewerModal: React.FC<DriveMediaViewerModalProps> = ({
 
             <button
               onClick={handleDownload}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+              className="p-1.5 sm:p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
               title="Download file"
             >
-              <Download className="w-4 h-4" />
+              <Download className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
 
             <button
               onClick={onClose}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-rose-900/60 hover:text-white text-slate-400 transition"
+              className="p-1.5 sm:p-2 rounded-xl bg-slate-800 hover:bg-rose-900/60 hover:text-white text-slate-400 transition"
               title="Close preview"
             >
-              <X className="w-4 h-4" />
+              <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </div>
         </div>
 
         {/* Media Preview Body */}
-        <div className="flex-1 overflow-hidden p-2 sm:p-4 bg-slate-950 flex items-center justify-center min-h-[400px]">
+        <div className="flex-1 overflow-hidden p-2 sm:p-4 bg-slate-950 flex items-center justify-center min-h-[200px] sm:min-h-[380px]">
           {hasValidDriveId ? (
-            <div className="w-full h-[65vh] rounded-2xl overflow-hidden border border-slate-800 bg-slate-900 shadow-2xl relative">
+            <div className="w-full h-[52vh] sm:h-[65vh] rounded-xl sm:rounded-2xl overflow-hidden border border-slate-800 bg-slate-900 shadow-2xl relative">
               <iframe
                 src={`https://drive.google.com/file/d/${attachment.driveId}/preview`}
                 allow="autoplay"
-                className="w-full h-full border-0 rounded-2xl"
+                className="w-full h-full border-0 rounded-xl sm:rounded-2xl"
                 title={attachment.name}
               />
             </div>

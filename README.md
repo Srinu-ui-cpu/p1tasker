@@ -3,15 +3,16 @@
 <div align="center">
 
 [![Live Production](https://img.shields.io/badge/Live%20App-p1tasker.vercel.app-6366f1?style=for-the-badge&logo=vercel&logoColor=white)](https://p1tasker.vercel.app)
+[![Live Analytics](https://img.shields.io/badge/Real%20Analytics-analytics.html-10b981?style=for-the-badge&logo=googleanalytics&logoColor=white)](https://p1tasker.vercel.app/analytics.html)
 [![React 18](https://img.shields.io/badge/React-18.3-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev)
 [![TypeScript 5](https://img.shields.io/badge/TypeScript-5.5-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Tailwind CSS 3](https://img.shields.io/badge/Tailwind_CSS-3.4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
 [![Google Drive Cloud Vault](https://img.shields.io/badge/Google_Drive-100%25_User_Owned-34A853?style=for-the-badge&logo=googledrive&logoColor=white)](https://www.google.com/drive/)
 [![AES-256-GCM](https://img.shields.io/badge/Security-AES--256--GCM-E11D48?style=for-the-badge&logo=shield&logoColor=white)](https://en.wikipedia.org/wiki/Galois/Counter_Mode)
 
-**A unified, multi-platform executive productivity operating system featuring 100% user-owned Google Drive cloud storage, a Word Document Canvas with inline media, perpetual dual-token sessions, multilingual voice dictation with acoustic stutter removal, multi-model AI routing, and a real-time audience telemetry dashboard.**
+**A unified, multi-platform executive productivity operating system featuring 100% user-owned Google Drive cloud storage, a Word Document Canvas with inline media, perpetual dual-token sessions, multilingual voice dictation with acoustic stutter removal, multi-model AI routing, universal responsiveness from smartwatches to 4K PCs, and a separate zero-simulation real-time audience telemetry dashboard.**
 
-[🚀 **Launch Live App**](https://p1tasker.vercel.app) • [📘 **User Guide**](./USAGE.md) • [⚡ **Technical Specs**](./FEATURES.md) • [🗺️ **Navigation Guide**](./NAVIGATION.md)
+[🚀 **Launch Live App**](https://p1tasker.vercel.app) • [📊 **Live Real Analytics**](https://p1tasker.vercel.app/analytics.html) • [📘 **User Guide**](./USAGE.md) • [⚡ **Technical Specs**](./FEATURES.md) • [🗺️ **Navigation Guide**](./NAVIGATION.md)
 
 </div>
 
@@ -26,17 +27,20 @@ Most productivity tools lock your data inside proprietary databases or log you o
 - **Word Document Canvas**: Journal naturally with sequential paragraphs, inline media attachments, and small clickable preview cards—zero exposed tags.
 - **Multilingual Voice Typing with Stutter Removal**: Speak freely in English, Telugu, Hindi, Spanish, or 10+ languages with automatic microphone stutter deduplication.
 - **Omni-AI Brain (BYOK + Zero-Config)**: Switch dynamically between Google Gemini, Groq Llama 3.3, xAI Grok, and OpenAI with automated rate-limit auto-failover.
-- **Real-Time Audience Analytics Dashboard**: Built-in executive telemetry tracking visitor counts, geographic distribution with national flags, device breakdown, and feature usage.
+- **Universal Responsiveness (Smartwatch to 4K)**: Fluid adaptability across any display—from smartwatches (180px–280px) and mobile phones to multi-monitor 4K workstations.
+- **Separate Zero-Simulation Real-Time Analytics**: A dedicated executive analytics page hosted separately in this repository and live on the web, showing **100% genuine, real-time data** (real IP geolocations, real clicks, zero simulated or mock visitors).
 
 ---
 
-## 🌐 Live Production Deployment
+## 🌐 Live Production Deployment & Links
 
-Experience Tasker OS directly in your browser without installing anything:
+| Destination | URL / Link | Description |
+| :--- | :--- | :--- |
+| 🚀 **Main Web Application** | **[https://p1tasker.vercel.app](https://p1tasker.vercel.app)** | Core executive productivity suite (Calendar, Tasks, Scheduler, Diary, Encrypted Backup, Omni-AI). |
+| 📊 **Real Analytics Page** | **[https://p1tasker.vercel.app/analytics.html](https://p1tasker.vercel.app/analytics.html)** | Standalone audience & regional telemetry dashboard powered strictly by real user sessions and real clicks. |
+| 📂 **GitHub Repository Page** | **[analytics.html in GitHub](./analytics.html)** | Source file hosted directly in GitHub repository. |
 
-👉 **[https://p1tasker.vercel.app](https://p1tasker.vercel.app)** 👈
-
-*Compatible with all modern browsers: Chrome, Edge, Safari, Firefox, iOS Safari, and Android Chrome. PWA-installable with offline support.*
+*Compatible with all modern screen sizes: Apple Watch / WearOS smartwatches (180px+), iPhone / Android phones, tablets, laptops, and ultra-wide/4K desktop monitors.*
 
 ---
 
@@ -82,13 +86,13 @@ Experience Tasker OS directly in your browser without installing anything:
 - **4 Strategic Quadrants**: Do First (Urgent & Important), Schedule (Important, Not Urgent), Delegate (Urgent, Not Important), and Don't Do.
 - **Browser-Synthesized Harmonic Chimes**: Web Audio API generates ascending melodic chords for 15-minute warnings and pulsing bells for 5-minute alerts. Zero external audio downloads required.
 
-### 6. 📊 Real-Time Audience & Regional Analytics Dashboard
-- **Executive KPI Banner**: Live counters for Total Page Visits, Unique Anonymous Visitors, Active Browser Sessions, and Average Engagement Duration.
-- **Interactive Geographic Breakdown**: Detected visitor country, state/region, city, and timezone, paired with country flag emojis (🇮🇳, 🇺🇸, 🇬🇧, 🇩🇪, etc.) and animated percentage progress bars.
-- **Technology & Device Analytics**: Breakdowns for Desktop vs. Mobile vs. Tablet, operating systems, and browsers.
-- **Product Engagement Counters**: Real-time metrics for tasks created, tasks completed, diary entries written, files uploaded, AI queries executed, and voice dictation minutes.
-- **Live Activity Feed**: Streaming log of user actions.
-- **One-Click Export**: Download regional visitor spreadsheets (`CSV`) and comprehensive telemetry payloads (`JSON`).
+### 6. 📊 Standalone Real-Time Audience Analytics Page (Zero Simulation)
+- **Hosted Separately in GitHub**: Located at [`analytics.html`](./analytics.html) and deployed live at [`https://p1tasker.vercel.app/analytics.html`](https://p1tasker.vercel.app/analytics.html), cleanly separated from the main productivity app.
+- **Strictly Genuine Data (Zero Simulation)**: 100% real visitors, real IP geolocation, real device identification, and actual real feature clicks—zero mock or baseline filler data.
+- **Executive KPI Banner**: Live counters for Total Page Visits, Unique Visitors, Active Sessions, and Average Engagement.
+- **Interactive Geographic Breakdown**: Detected real visitor country, state/region, city, and timezone, paired with country flag emojis (🇮🇳, 🇺🇸, 🇬🇧, 🇩🇪, etc.) and visual traffic share percentages.
+- **Technology & Device Analytics**: Breakdowns for Smart Watches, Mobile, Tablets, and Desktops, plus operating systems and browsers.
+- **Live Activity Feed & Export**: Streaming log of genuine user actions, with one-click **CSV** and **JSON** export.
 
 ### 7. 🔒 Military-Grade Encrypted Backups (AES-256-GCM)
 - Export your entire workspace into a portable `.tasker` encrypted archive.
@@ -98,6 +102,12 @@ Experience Tasker OS directly in your browser without installing anything:
 ### 8. ☀️/🌙 Deep Space Slate & Crisp Paper White Themes
 - One-click navigation toggle between **Deep Space Slate (Dark)** and **Crisp Executive Paper (Light)**.
 - High-contrast typography and subtle border lines optimized for both day and night sessions.
+
+### 9. ⌚ Universal Responsiveness (Smartwatch to Big PC 4K)
+- **Smartwatch & Ultra-Compact (180px - 280px)**: Compact icons, micro-dot indicators on calendar cells, stacked controls, and zero horizontal scrolling.
+- **Mobile Phones (320px - 480px)**: Fluid full-width task entry, swipeable top navigation, touch-friendly tap targets (`min-h-[44px]`), and responsive headers.
+- **Tablets & Laptops (768px - 1024px)**: Dual-pane calendar and workspace arrangements.
+- **Desktop & Ultra-Wide 4K (1280px+)**: Multi-column Eisenhower scheduling and elegant reading margins.
 
 ---
 
