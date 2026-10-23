@@ -1,6 +1,7 @@
 import { GoogleAccount, GoogleDriveState, UploadProgress } from '../types';
 export type { UploadProgress };
 import { StorageService } from './storageService';
+import { AnalyticsService } from './analyticsService';
 
 export type MediaCategory =
   | 'Videos'
@@ -1288,6 +1289,11 @@ export class GoogleAuthService {
       updated.isSyncing = false;
       updated.lastSyncedAt = new Date().toISOString();
       StorageService.saveGoogleDriveState(updated);
+      try {
+        AnalyticsService.trackEvent('drive_sync', 'Google Drive sync completed');
+      } catch {
+        // safe fallback
+      }
     }
 
     return true;

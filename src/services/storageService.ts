@@ -1,4 +1,5 @@
 import { TaskItem, DiaryEntry, Project, DeduplicatedFileRegistry, FileAttachment, GoogleDriveState, ChatSession, ChatMessage } from '../types';
+import { AnalyticsService } from './analyticsService';
 
 const STORAGE_KEYS = {
   TASKS: 'tasker_tasks_v1',
@@ -151,12 +152,27 @@ export class StorageService {
     };
     const tasks = this.getTasks();
     const index = tasks.findIndex(t => t.id === sanitized.id);
+    const isNew = index < 0;
+    const wasCompleted = !isNew && tasks[index].status === 'completed';
+    const isNowCompleted = sanitized.status === 'completed';
+
     if (index >= 0) {
       tasks[index] = { ...sanitized, updatedAt: new Date().toISOString() };
     } else {
       tasks.push({ ...sanitized, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() });
     }
     this.saveTasks(tasks);
+
+    try {
+      if (isNew) {
+        AnalyticsService.trackEvent('task_created', `Task created: ${sanitized.title.slice(0, 30)}`, sanitized.priority);
+      } else if (!wasCompleted && isNowCompleted) {
+        AnalyticsService.trackEvent('task_completed', `Task completed: ${sanitized.title.slice(0, 30)}`, sanitized.priority);
+      }
+    } catch {
+      // safe fallback
+    }
+
     try {
       import('./googleAuthService').then(({ GoogleAuthService }) => {
         if (GoogleAuthService.isAuthenticated()) {
@@ -241,6 +257,11 @@ export class StorageService {
     const entries = this.getDiaryEntries();
     entries[entry.date] = { ...entry, updatedAt: new Date().toISOString() };
     this.saveDiaryEntries(entries);
+    try {
+      AnalyticsService.trackEvent('diary_written', `Diary updated for ${entry.date}`, entry.mood);
+    } catch {
+      // safe fallback
+    }
   }
 
   // --- PROJECTS ---
@@ -456,6 +477,12 @@ export class StorageService {
         supersededBy: existing.supersededBy,
       };
 
+      try {
+        AnalyticsService.trackEvent('file_uploaded', `Re-used existing file: ${file.name}`, category);
+      } catch {
+        // safe fallback
+      }
+
       return {
         attachment,
         isDuplicate: true,
@@ -519,6 +546,12 @@ export class StorageService {
         updatedFromHash: existingSameNameItem.hash,
       };
 
+      try {
+        AnalyticsService.trackEvent('file_uploaded', `Updated version v${nextVersion}: ${file.name}`, category);
+      } catch {
+        // safe fallback
+      }
+
       return {
         attachment,
         isDuplicate: false,
@@ -561,6 +594,12 @@ export class StorageService {
       version: 1,
       isUpdated: false,
     };
+
+    try {
+      AnalyticsService.trackEvent('file_uploaded', `Uploaded: ${file.name}`, category);
+    } catch {
+      // safe fallback
+    }
 
     return {
       attachment,

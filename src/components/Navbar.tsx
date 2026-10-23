@@ -16,7 +16,8 @@ import {
   LogOut,
   Sun,
   Moon,
-  FolderOpen
+  FolderOpen,
+  BarChart3
 } from 'lucide-react';
 import { format, parseISO, addDays, subDays } from 'date-fns';
 import { GoogleDriveState, AIProvider } from '../types';
@@ -26,8 +27,8 @@ import { GoogleAuthService } from '../services/googleAuthService';
 interface NavbarProps {
   currentDate: string; // YYYY-MM-DD
   onDateChange: (date: string) => void;
-  activeTab: 'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup';
-  setActiveTab: (tab: 'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup') => void;
+  activeTab: 'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup' | 'analytics';
+  setActiveTab: (tab: 'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup' | 'analytics') => void;
   onOpenSearch: () => void;
   onOpenSettings: () => void;
   onToggleChat: () => void;
@@ -180,6 +181,19 @@ export const Navbar: React.FC<NavbarProps> = ({
           >
             <ShieldCheck className="w-4 h-4 text-emerald-400" />
             <span className="hidden md:inline">Backup & Sync</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-medium transition ${
+              activeTab === 'analytics' 
+                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30 font-bold' 
+                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+            }`}
+            title="Real-Time Visitor & Regional Audience Intelligence Dashboard"
+          >
+            <BarChart3 className="w-4 h-4 text-cyan-400" />
+            <span className="hidden md:inline">Analytics</span>
           </button>
         </nav>
 

@@ -23,6 +23,7 @@ declare global {
 }
 
 import { AIBrokerService } from './aiBrokerService';
+import { AnalyticsService } from './analyticsService';
 
 export class SpeechService {
   private static recognition: SpeechRecognitionInstance | null = null;
@@ -119,6 +120,7 @@ export class SpeechService {
     if (this.recognition) {
       try {
         this.recognition.stop();
+        AnalyticsService.trackEvent('voice_dictation', 'Browser speech dictation completed');
       } catch {
         // Ignore
       }
@@ -173,6 +175,11 @@ export class SpeechService {
           this.mediaRecorder = null;
 
           const result = await this.transcribeAudioWithAI(audioBlob);
+          try {
+            AnalyticsService.trackEvent('voice_dictation', `AI Whisper transcribed (${result.transcript.length} chars)`, result.modelUsed);
+          } catch {
+            // safe fallback
+          }
           resolve(result);
         } catch (err) {
           reject(err);

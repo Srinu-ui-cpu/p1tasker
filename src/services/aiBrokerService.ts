@@ -1,5 +1,6 @@
 import { AIState, AIProvider, CustomAIConfig } from '../types';
 import { StorageService } from './storageService';
+import { AnalyticsService } from './analyticsService';
 
 const AI_STORAGE_KEY = 'tasker_ai_config_v1';
 
@@ -192,6 +193,20 @@ export class AIBrokerService {
   // --- UNIVERSAL COMPLETION ROUTER WITH RATE-LIMIT (429) AUTO-FALLBACK ---
 
   static async completeText(
+    prompt: string,
+    systemInstruction: string = 'You are Tasker AI, an intelligent, empathetic, executive personal assistant.',
+    providerOverride?: AIProvider
+  ): Promise<{ text: string; modelUsed: string; fallbackOccurred?: boolean }> {
+    const res = await this._executeCompleteText(prompt, systemInstruction, providerOverride);
+    try {
+      AnalyticsService.trackEvent('ai_query', `Prompt: "${prompt.slice(0, 35)}..."`, res.modelUsed);
+    } catch {
+      // safe fallback
+    }
+    return res;
+  }
+
+  private static async _executeCompleteText(
     prompt: string,
     systemInstruction: string = 'You are Tasker AI, an intelligent, empathetic, executive personal assistant.',
     providerOverride?: AIProvider

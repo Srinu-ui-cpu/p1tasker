@@ -292,6 +292,7 @@ import { SpeechService } from '../src/services/speechService.ts';
 import { ThemeService } from '../src/services/themeService.ts';
 import { parseDocumentContent } from '../src/components/WordDocumentCanvas.tsx';
 import { TaskItem, DiaryEntry, FileAttachment } from '../src/types/index.ts';
+import { AnalyticsService, getCountryFlag } from '../src/services/analyticsService.ts';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -2059,6 +2060,67 @@ Translation: ఈరోజు నా పని పూర్తయింది.`;
     assertEquals(sanitizedState.accounts[0].email, 'solouser@gmail.com', 'Single account matches logged-in user');
   });
 
+  console.log('\n>> Running Suite 19: Audience Analytics, Regional Telemetry & Marketing Docs');
+
+  await runTest('AnalyticsInitialSummary', 'AnalyticsService generates valid initial summary with visitor and session IDs', async () => {
+    await AnalyticsService.init();
+    const summary = AnalyticsService.getSummary();
+    assert(summary !== null && typeof summary === 'object', 'Summary must be an object');
+    assert(summary.totalVisits >= 1, 'Total visits must be at least 1');
+    assert(summary.uniqueVisitors >= 1, 'Unique visitors must be at least 1');
+    assert(typeof summary.currentVisitor.id === 'string', 'Session ID must be string');
+    assert(typeof summary.currentVisitor.visitorId === 'string', 'Visitor ID must be string');
+    assert(Array.isArray(summary.regionalBreakdown), 'Regional breakdown must be an array');
+  });
+
+  await runTest('AnalyticsEventTrackingAndFeatureCounters', 'AnalyticsService tracks telemetry events and updates feature counters', () => {
+    const before = AnalyticsService.getSummary();
+    const initTasks = before.featureUsage.tasksCreated;
+    const initDiary = before.featureUsage.diaryEntries;
+    const initUploads = before.featureUsage.filesUploaded;
+    const initAI = before.featureUsage.aiQueries;
+
+    AnalyticsService.trackEvent('task_created', 'Test task created', 'high');
+    AnalyticsService.trackEvent('diary_written', 'Test diary written', 'good');
+    AnalyticsService.trackEvent('file_uploaded', 'Test file uploaded', 'Videos');
+    AnalyticsService.trackEvent('ai_query', 'Test AI prompt', 'Groq');
+
+    const after = AnalyticsService.getSummary();
+    assertEquals(after.featureUsage.tasksCreated, initTasks + 1, 'Tasks created incremented by 1');
+    assertEquals(after.featureUsage.diaryEntries, initDiary + 1, 'Diary entries incremented by 1');
+    assertEquals(after.featureUsage.filesUploaded, initUploads + 1, 'Files uploaded incremented by 1');
+    assertEquals(after.featureUsage.aiQueries, initAI + 1, 'AI queries incremented by 1');
+    assert(after.recentActivity.length > 0, 'Recent activity stream contains tracked events');
+    assertEquals(after.recentActivity[0].type, 'ai_query', 'Latest event is top of activity stream');
+  });
+
+  await runTest('AnalyticsFlagHelper', 'getCountryFlag correctly translates ISO 2-letter codes into flag emojis', () => {
+    assertEquals(getCountryFlag('IN'), '🇮🇳', 'India flag emoji');
+    assertEquals(getCountryFlag('US'), '🇺🇸', 'United States flag emoji');
+    assertEquals(getCountryFlag('GB'), '🇬🇧', 'United Kingdom flag emoji');
+    assertEquals(getCountryFlag('DE'), '🇩🇪', 'Germany flag emoji');
+    assertEquals(getCountryFlag(''), '🌐', 'Empty returns globe');
+  });
+
+  await runTest('MarketingDocsIntegrity', 'Verifies NAVIGATION.md, FEATURES.md, USAGE.md and README.md links and marketing structure', () => {
+    const navPath = path.resolve(process.cwd(), 'NAVIGATION.md');
+    const featPath = path.resolve(process.cwd(), 'FEATURES.md');
+    const usagePath = path.resolve(process.cwd(), 'USAGE.md');
+    const readPath = path.resolve(process.cwd(), 'README.md');
+
+    assert(fs.existsSync(navPath), 'NAVIGATION.md must exist');
+    assert(fs.existsSync(featPath), 'FEATURES.md must exist');
+    assert(fs.existsSync(usagePath), 'USAGE.md must exist');
+    assert(fs.existsSync(readPath), 'README.md must exist');
+
+    const navContent = fs.readFileSync(navPath, 'utf8');
+    const readContent = fs.readFileSync(readPath, 'utf8');
+
+    assert(navContent.includes('p1tasker.vercel.app'), 'NAVIGATION.md must include live URL link');
+    assert(readContent.includes('p1tasker.vercel.app'), 'README.md must include live URL link');
+    assert(readContent.includes('NAVIGATION.md'), 'README.md must link to NAVIGATION.md');
+  });
+
   await runTest('WorkspacePristineDataPurge', 'Cleanly purges all test and dummy entries so the workspace is completely pristine', () => {
     // 1. Purge storage service data
     StorageService.saveTasks([]);
@@ -2093,6 +2155,7 @@ Translation: ఈరోజు నా పని పూర్తయింది.`;
   if (failedCount > 0) {
     process.exit(1);
   }
+  process.exit(0);
 }
 
 main().catch((err) => {

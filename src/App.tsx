@@ -19,11 +19,13 @@ import { FirebaseAuthService } from './services/firebaseAuthService';
 import { AlarmService, ActiveAlarmTrigger } from './services/alarmService';
 import { AIBrokerService } from './services/aiBrokerService';
 import { ThemeService } from './services/themeService';
+import { AnalyticsService } from './services/analyticsService';
 import { TaskItem, GoogleDriveState, AIProvider } from './types';
 
 import { PrivacyPolicyView } from './components/PrivacyPolicyView';
 import { TermsOfServiceView } from './components/TermsOfServiceView';
 import { AttachGoogleModal } from './components/AttachGoogleModal';
+import { AnalyticsDashboard } from './components/AnalyticsDashboard';
 
 export function App() {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
@@ -45,7 +47,7 @@ export function App() {
   });
   const [currentDate, setCurrentDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   // Calendar appears first after Google authentication
-  const [activeTab, setActiveTab] = useState<'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup'>('calendar');
+  const [activeTab, setActiveTab] = useState<'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup' | 'analytics'>('calendar');
   const [tasks, setTasks] = useState<TaskItem[]>(() => StorageService.getTasksForDate(currentDate));
 
   // Modals & Drawers
@@ -73,11 +75,12 @@ export function App() {
     refreshTasks();
   }, [currentDate]);
 
-  // Start background alarm polling loop & subscribe to alarms
+  // Start background alarm polling loop, perpetual token manager & audience telemetry
   useEffect(() => {
     ThemeService.initTheme();
     AlarmService.startScheduler();
     GoogleAuthService.startPerpetualTokenManager();
+    AnalyticsService.init().catch(() => {});
     const unsubscribe = AlarmService.onAlarm((trigger) => {
       setActiveAlarm(trigger);
     });
@@ -88,9 +91,9 @@ export function App() {
     };
   }, []);
 
-  const handleDateSelect = (date: string, tab: 'tasks' | 'diary' | 'scheduler' | 'calendar' | 'backup' = 'tasks') => {
+  const handleDateSelect = (date: string, tab: 'tasks' | 'diary' | 'scheduler' | 'calendar' | 'backup' | 'analytics' = 'tasks') => {
     setCurrentDate(date);
-    setActiveTab(tab as 'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup');
+    setActiveTab(tab as 'calendar' | 'tasks' | 'scheduler' | 'diary' | 'backup' | 'analytics');
   };
 
   // If user is not authenticated with Google, show Landing Page or Clean Login Page
@@ -212,6 +215,10 @@ export function App() {
           <BackupRestoreView
             onDataRestored={refreshTasks}
           />
+        )}
+
+        {activeTab === 'analytics' && (
+          <AnalyticsDashboard />
         )}
       </main>
 
