@@ -1218,6 +1218,25 @@ End of meeting notes.`;
     assert(indexCssContent.includes('transition-colors'), 'index.css includes smooth color transitions');
   });
 
+  await runTest('ResponsiveAudit', 'Chatbot keys section features interactive collapse/uncollapse arrow for mobile viewports', () => {
+    const selectorPath = path.resolve(process.cwd(), 'src/components/DiaryAIModelSelector.tsx');
+    const drawerPath = path.resolve(process.cwd(), 'src/components/GlobalChatbotDrawer.tsx');
+    const diaryChatPath = path.resolve(process.cwd(), 'src/components/DiaryAIChatModal.tsx');
+
+    const selectorContent = fs.readFileSync(selectorPath, 'utf8');
+    const drawerContent = fs.readFileSync(drawerPath, 'utf8');
+    const diaryChatContent = fs.readFileSync(diaryChatPath, 'utf8');
+
+    // Selector provides collapse toggle state and arrows
+    assert(selectorContent.includes('isCollapsed') && selectorContent.includes('setIsCollapsed'), 'DiaryAIModelSelector maintains isCollapsed state');
+    assert(selectorContent.includes('ChevronDown') && selectorContent.includes('ChevronUp'), 'DiaryAIModelSelector provides both down and up chevron toggle arrows');
+    assert(selectorContent.includes('window.innerWidth <= 640'), 'DiaryAIModelSelector defaults to collapsed on mobile viewports');
+
+    // Both Chatbots integrate the collapsible selector
+    assert(drawerContent.includes('<DiaryAIModelSelector'), 'GlobalChatbotDrawer embeds collapsible DiaryAIModelSelector');
+    assert(diaryChatContent.includes('<DiaryAIModelSelector'), 'DiaryAIChatModal embeds collapsible DiaryAIModelSelector');
+  });
+
   // =========================================================================
   // SUITE 12: Documentation Integrity Verification
   // =========================================================================

@@ -343,7 +343,7 @@ export const DiaryAIChatModal: React.FC<DiaryAIChatModalProps> = ({
         )}
 
         {/* AI Engine & Key Selector Bar */}
-        <div className="px-4 py-2 bg-slate-950/80 border-b border-slate-800">
+        <div className="px-2.5 py-1.5 sm:px-4 sm:py-2 bg-slate-950/80 border-b border-slate-800">
           <DiaryAIModelSelector
             title="Diary AI Model & Key Manager"
           />

@@ -401,7 +401,7 @@ export const GlobalChatbotDrawer: React.FC<GlobalChatbotDrawerProps> = ({
           </div>
 
           {/* AI Model & Key Selector Bar */}
-          <div className="p-2 sm:p-3 bg-slate-950/80 border-b border-slate-800">
+          <div className="p-1.5 sm:p-3 bg-slate-950/80 border-b border-slate-800">
             <DiaryAIModelSelector
               title="Chatbot AI Model & Key Manager"
               onModelChanged={(newProv) => {
