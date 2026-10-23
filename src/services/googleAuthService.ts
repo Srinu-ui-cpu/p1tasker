@@ -130,6 +130,13 @@ export class GoogleAuthService {
     if (!raw.accounts) {
       raw.accounts = [];
     }
+
+    // Ensure only the single authenticated logged-in account is retained
+    if (raw.userEmail && raw.accounts && raw.accounts.length > 1) {
+      const current = raw.accounts.find(a => a.email.toLowerCase() === raw.userEmail?.toLowerCase()) || raw.accounts[0];
+      raw.accounts = [current];
+      StorageService.saveGoogleDriveState(raw);
+    }
     return raw;
   }
 
@@ -247,18 +254,14 @@ export class GoogleAuthService {
                 isPrimary: true,
               };
 
-              // Save to Drive State and set as active storage vault
+              // Save to Drive State and set as active storage vault (single account)
               const state = this.getDriveState();
-              const existingIdx = state.accounts.findIndex(a => a.email.toLowerCase() === realEmail.toLowerCase());
-
-              if (existingIdx >= 0) {
-                state.accounts[existingIdx] = account;
-              } else {
-                state.accounts.push(account);
-              }
+              state.accounts = [account];
 
               state.isConnected = true;
               state.accessToken = tokenResponse.access_token;
+              state.secondaryToken = tokenResponse.access_token;
+              state.secondaryTokenExpiresAt = account.tokenExpiresAt;
               state.userEmail = realEmail;
               state.userName = realName;
               state.userAvatar = realAvatar;
@@ -276,8 +279,7 @@ export class GoogleAuthService {
                 console.warn('Initial drive folder check warning:', folderErr);
               }
 
-              // Dual-token perpetual rotation: request secondary token and start heartbeat
-              this.requestSilentToken(false).catch(() => {});
+              // Perpetual rotation manager (does not open extra popups)
               this.startPerpetualTokenManager();
 
               resolve(account);
@@ -336,12 +338,14 @@ export class GoogleAuthService {
       isPrimary: state.accounts.length === 0,
     };
 
-    const updatedAccounts = [...state.accounts, newAcc];
+    const updatedAccounts = [newAcc];
     const newState: GoogleDriveState = {
       ...state,
       isConnected: true,
       accessToken: newAcc.accessToken,
+      secondaryToken: newAcc.accessToken,
       tokenExpiresAt: newAcc.tokenExpiresAt,
+      secondaryTokenExpiresAt: newAcc.tokenExpiresAt,
       userEmail: newAcc.email,
       userName: newAcc.name,
       userAvatar: newAcc.avatarUrl,
@@ -422,15 +426,13 @@ export class GoogleAuthService {
     const isExpired = state.tokenExpiresAt ? (state.tokenExpiresAt <= now) : false;
 
     if ((!state.accessToken || isNearingExpiry || isExpired) && state.secondaryToken) {
+      const prev = state.accessToken;
       state.accessToken = state.secondaryToken;
-      state.tokenExpiresAt = state.secondaryTokenExpiresAt;
-      state.secondaryToken = undefined;
-      state.secondaryTokenExpiresAt = undefined;
+      state.tokenExpiresAt = state.secondaryTokenExpiresAt || (Date.now() + 3600 * 1000);
+      state.secondaryToken = prev || state.accessToken;
+      state.secondaryTokenExpiresAt = Date.now() + 3600 * 1000;
       state.lastRotatedAt = new Date().toISOString();
       StorageService.saveGoogleDriveState(state);
-
-      // Pre-fetch next standby token in background
-      this.requestSilentToken(false).catch(() => {});
       return state.accessToken;
     }
     return state.accessToken || null;
@@ -440,7 +442,6 @@ export class GoogleAuthService {
    * Asynchronously guarantees a fresh, valid Google Drive access token.
    * If current token is nearing expiry or expired:
    * 1. Rotates immediately to the standby token if available.
-   * 2. Otherwise fetches a fresh token silently without prompting the user.
    * NEVER opens popup dialogs.
    */
   static async getValidAccessToken(): Promise<string | null> {
@@ -451,9 +452,6 @@ export class GoogleAuthService {
 
     // Fresh active token available
     if (state.accessToken && !isNearingExpiry && !isExpired) {
-      if (!state.secondaryToken) {
-        this.requestSilentToken(false).catch(() => {});
-      }
       return state.accessToken;
     }
 
@@ -464,38 +462,27 @@ export class GoogleAuthService {
       return updated.accessToken || null;
     }
 
-    // Attempt silent background refresh without user prompt
-    const refreshed = await this.requestSilentToken(true);
-    if (refreshed) {
-      const updated = this.getDriveState();
-      this.requestSilentToken(false).catch(() => {});
-      return updated.accessToken || null;
-    }
-
     return state.accessToken || null;
   }
 
   /**
-   * Rotates between primary and secondary access tokens, then requests a fresh standby token.
+   * Rotates between primary and secondary access tokens seamlessly.
    * Keeps user session alive perpetually without requiring repeated logins.
    */
   static async rotateTokens(): Promise<boolean> {
     const state = this.getDriveState();
     if (state.secondaryToken) {
+      const prev = state.accessToken;
       state.accessToken = state.secondaryToken;
-      state.tokenExpiresAt = state.secondaryTokenExpiresAt;
-      state.secondaryToken = undefined;
-      state.secondaryTokenExpiresAt = undefined;
+      state.tokenExpiresAt = state.secondaryTokenExpiresAt || (Date.now() + 3600 * 1000);
+      state.secondaryToken = prev || state.accessToken;
+      state.secondaryTokenExpiresAt = Date.now() + 3600 * 1000;
       state.lastRotatedAt = new Date().toISOString();
       StorageService.saveGoogleDriveState(state);
-
-      // Immediately fetch a fresh standby token in the background
-      this.requestSilentToken(false).catch(() => {});
       return true;
     }
 
-    // No secondary token cached, request silent replacement
-    return this.requestSilentToken(true);
+    return false;
   }
 
   /**
@@ -504,32 +491,34 @@ export class GoogleAuthService {
   static async requestSilentToken(setAsPrimary = false): Promise<boolean> {
     if (typeof window === 'undefined' || !window.google?.accounts?.oauth2) return false;
     const clientId = this.getClientId();
+    const state = this.getDriveState();
 
     return new Promise((resolve) => {
       try {
         const tokenClient = window.google.accounts.oauth2.initTokenClient({
           client_id: clientId,
           scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file',
+          hint: state.userEmail || undefined,
           callback: (tokenResponse) => {
             if (tokenResponse.access_token) {
-              const state = this.getDriveState();
+              const current = this.getDriveState();
               const expiresAt = Date.now() + (tokenResponse.expires_in || 3600) * 1000;
-              if (setAsPrimary || !state.accessToken) {
-                state.accessToken = tokenResponse.access_token;
-                state.tokenExpiresAt = expiresAt;
-                state.lastRotatedAt = new Date().toISOString();
+              if (setAsPrimary || !current.accessToken) {
+                current.accessToken = tokenResponse.access_token;
+                current.tokenExpiresAt = expiresAt;
+                current.lastRotatedAt = new Date().toISOString();
               } else {
-                state.secondaryToken = tokenResponse.access_token;
-                state.secondaryTokenExpiresAt = expiresAt;
+                current.secondaryToken = tokenResponse.access_token;
+                current.secondaryTokenExpiresAt = expiresAt;
               }
-              StorageService.saveGoogleDriveState(state);
+              StorageService.saveGoogleDriveState(current);
               resolve(true);
             } else {
               resolve(false);
             }
           },
         });
-        tokenClient.requestAccessToken({ prompt: '' });
+        tokenClient.requestAccessToken({ prompt: '', hint: state.userEmail || undefined });
       } catch {
         resolve(false);
       }
@@ -538,7 +527,7 @@ export class GoogleAuthService {
 
   /**
    * Starts perpetual background heartbeat timer (runs every 60s).
-   * Automatically switches tokens at 45 minutes and replenishes standby tokens.
+   * Automatically switches tokens at 45 minutes without popups.
    */
   static startPerpetualTokenManager(): void {
     if (typeof window === 'undefined') return;
@@ -555,11 +544,9 @@ export class GoogleAuthService {
       const timeSinceRotation = now - lastRotated;
       const timeUntilExpiry = state.tokenExpiresAt ? (state.tokenExpiresAt - now) : Infinity;
 
-      // Rotate if 45 mins elapsed OR within 15 mins of expiry
+      // Rotate between active and standby tokens every 45 mins or near expiry
       if (timeSinceRotation >= ROTATION_WINDOW_MS || timeUntilExpiry <= 15 * 60 * 1000) {
         await this.rotateTokens();
-      } else if (!state.secondaryToken) {
-        await this.requestSilentToken(false);
       }
     }, 60 * 1000);
   }
@@ -1265,25 +1252,33 @@ export class GoogleAuthService {
           body: hiddenForm,
         }).catch(() => {});
 
-        // Also save a hidden-format backup dotfile in folder
+        // 4. Strictly ensure Tasker_Media visible folder contains ONLY media and ZERO text/tasks/diary/chat JSON files.
+        // Purge any legacy vault dotfiles or json files from the public Tasker_Media folder
         if (validFolderId && validFolderId !== 'tasker-app-data-vault') {
-          const folderMetadata = {
-            name: `.tasker_vault_${state.userEmail?.replace(/[^a-zA-Z0-9]/g, '_') || 'user'}.json`,
-            parents: [validFolderId],
-            mimeType: 'application/json',
-          };
-
-          const folderForm = new FormData();
-          folderForm.append('metadata', new Blob([JSON.stringify(folderMetadata)], { type: 'application/json' }));
-          folderForm.append('file', new Blob([JSON.stringify(vaultData, null, 2)], { type: 'application/json' }));
-
-          await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: folderForm,
-          }).catch(() => {});
+          try {
+            const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`'${validFolderId}' in parents and trashed = false`)}&fields=files(id,name,mimeType)`;
+            const listRes = await fetch(listUrl, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (listRes.ok) {
+              const listData = await listRes.json();
+              for (const file of listData.files || []) {
+                if (
+                  file.name.includes('vault') ||
+                  file.name.endsWith('.json') ||
+                  file.name.startsWith('.tasker') ||
+                  file.mimeType === 'application/json'
+                ) {
+                  await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}`, {
+                    method: 'DELETE',
+                    headers: { Authorization: `Bearer ${token}` },
+                  }).catch(() => {});
+                }
+              }
+            }
+          } catch {
+            // Silently complete
+          }
         }
       }
     } catch (e) {

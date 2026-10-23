@@ -590,20 +590,17 @@ async function main() {
     assertEquals(searchUrl, 'https://drive.google.com/drive/u/0/my-drive', 'Fallback My Drive URL');
   });
 
-  await runTest('GoogleAuthService', 'Multi-account linking, active switching, and sign out', () => {
+  await runTest('GoogleAuthService', 'Single logged-in account authentication and sign out', () => {
     // Sign in Account 1
     const acc1 = GoogleAuthService.signInWithRealEmail('user1@gmail.com', 'User One');
     assertEquals(acc1.email, 'user1@gmail.com', 'Account 1 email matches');
     assert(GoogleAuthService.isAuthenticated(), 'User 1 is authenticated');
     assertEquals(GoogleAuthService.getActiveAccount()?.email, 'user1@gmail.com', 'User 1 is active');
+    assertEquals(GoogleAuthService.getAllAccounts().length, 1, 'Only 1 active logged-in account registered');
 
-    // Add Account 2
-    const acc2 = GoogleAuthService.addGoogleAccount('user2.workspace@company.com', 'User Two');
-    assertEquals(GoogleAuthService.getAllAccounts().length, 2, 'Two accounts registered');
-
-    // Switch active account to Account 2
-    const switched = GoogleAuthService.setActiveStorageAccount('user2.workspace@company.com');
-    assert(switched, 'Account switched successfully');
+    // Sign in Account 2 - replaces previous and retains strictly 1 account
+    const acc2 = GoogleAuthService.signInWithRealEmail('user2.workspace@company.com', 'User Two');
+    assertEquals(GoogleAuthService.getAllAccounts().length, 1, 'Still only 1 active account registered');
     assertEquals(GoogleAuthService.getActiveAccount()?.email, 'user2.workspace@company.com', 'User 2 is now active');
 
     // Sign out
@@ -2025,6 +2022,41 @@ Translation: ఈరోజు నా పని పూర్తయింది.`;
     const resV2 = await StorageService.attachFileToDate(docV2, '2026-10-24');
     assert(resV2.isUpdate, 'Must be marked as updated version');
     assertEquals(resV2.attachment.version, 2, 'Version must be incremented to 2');
+  });
+
+  await runTest('ChatAndDriveIsolation', 'Chat sessions saved to Drive vault and Tasker_Media isolates text data', async () => {
+    // 1. Create and save a chat session
+    const chatSession = StorageService.createChatSession('Test Architecture Discussion');
+    chatSession.messages.push({
+      id: 'msg-test-1',
+      sender: 'user',
+      content: 'Can you review the drive storage architecture?',
+      timestamp: '10:45 AM',
+    });
+    chatSession.messages.push({
+      id: 'msg-test-2',
+      sender: 'assistant',
+      content: 'Drive storage architecture isolates visible media files in Tasker_Media from private text vault.',
+      timestamp: '10:46 AM',
+    });
+    StorageService.updateChatSession(chatSession);
+
+    const savedChats = StorageService.getChatSessions();
+    const foundSession = savedChats.find(s => s.id === chatSession.id);
+    assert(!!foundSession, 'Chat session is saved in storage');
+    assertEquals(foundSession?.messages.length, 2, 'Chat messages count matches');
+
+    // 2. Single account enforcement in GoogleDriveState
+    const state = GoogleAuthService.getDriveState();
+    state.userEmail = 'solouser@gmail.com';
+    state.accounts = [
+      { id: 'acc-1', email: 'solouser@gmail.com', name: 'Solo User', isPrimary: true },
+      { id: 'acc-2', email: 'otheruser@gmail.com', name: 'Other User', isPrimary: false },
+    ];
+    StorageService.saveGoogleDriveState(state);
+    const sanitizedState = GoogleAuthService.getDriveState();
+    assertEquals(sanitizedState.accounts.length, 1, 'DriveState strictly retains only the single logged-in account');
+    assertEquals(sanitizedState.accounts[0].email, 'solouser@gmail.com', 'Single account matches logged-in user');
   });
 
   await runTest('WorkspacePristineDataPurge', 'Cleanly purges all test and dummy entries so the workspace is completely pristine', () => {

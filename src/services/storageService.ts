@@ -634,6 +634,15 @@ export class StorageService {
 
   static saveChatSessions(sessions: ChatSession[]): void {
     localStorage.setItem(STORAGE_KEYS.CHAT_SESSIONS, JSON.stringify(sessions));
+    try {
+      import('./googleAuthService').then(({ GoogleAuthService }) => {
+        if (GoogleAuthService.isAuthenticated()) {
+          GoogleAuthService.triggerDriveSync().catch(() => {});
+        }
+      });
+    } catch {
+      // ignore
+    }
   }
 
   static getActiveChatId(): string {

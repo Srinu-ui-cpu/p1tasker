@@ -169,39 +169,30 @@ export class FirebaseAuthService {
       driveState.lastSyncedAt = new Date().toISOString();
       if (accessToken) {
         driveState.accessToken = accessToken;
+        driveState.secondaryToken = accessToken;
         driveState.tokenExpiresAt = Date.now() + 3600 * 1000;
+        driveState.secondaryTokenExpiresAt = Date.now() + 3600 * 1000;
       }
 
-      // Add to linked accounts if not already present
-      const existingAccount = driveState.accounts.find(a => a.email.toLowerCase() === userEmail.toLowerCase());
-      if (!existingAccount) {
-        driveState.accounts.push({
-          id: `acc-${Date.now()}`,
-          name: userName,
-          email: userEmail,
-          avatarUrl: userAvatar,
-          accessToken: accessToken,
-          tokenExpiresAt: Date.now() + 3600 * 1000,
-          isPrimary: true,
-          addedAt: new Date().toISOString(),
-          isActiveStorage: true,
-        });
-      } else {
-        existingAccount.avatarUrl = userAvatar;
-        existingAccount.name = userName;
-        if (accessToken) {
-          existingAccount.accessToken = accessToken;
-          existingAccount.tokenExpiresAt = Date.now() + 3600 * 1000;
-        }
-      }
+      // Strictly set ONLY the currently logged-in account (no multi-account accumulation)
+      driveState.accounts = [{
+        id: `acc-${Date.now()}`,
+        name: userName,
+        email: userEmail,
+        avatarUrl: userAvatar,
+        accessToken: accessToken,
+        tokenExpiresAt: Date.now() + 3600 * 1000,
+        isPrimary: true,
+        addedAt: new Date().toISOString(),
+        isActiveStorage: true,
+      }];
 
       // Save drive state and mark as authenticated
       const { StorageService } = await import('./storageService');
       StorageService.saveGoogleDriveState(driveState);
       GoogleAuthService.setAuthenticated(true);
 
-      // Dual-token perpetual rotation: request secondary token and start heartbeat
-      GoogleAuthService.requestSilentToken(false).catch(() => {});
+      // Perpetual rotation manager (does not open extra popups)
       GoogleAuthService.startPerpetualTokenManager();
 
       // Proactively create Tasker_Media folder and all 8 typed subfolders in user's root Google Drive & sync vault
